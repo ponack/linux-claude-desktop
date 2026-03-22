@@ -60,13 +60,13 @@
   }
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" aria-label="Conversations sidebar">
   <div class="sidebar-header">
     <div class="sidebar-brand">
-      <img src="/assets/logo.svg" alt="UCD" class="sidebar-logo" />
+      <img src="/assets/logo.svg" alt="Ubuntu Claude Desktop" class="sidebar-logo" />
       <span class="sidebar-title">UCD</span>
     </div>
-    <button class="new-chat-btn" onclick={onNewChat}>
+    <button class="new-chat-btn" onclick={onNewChat} aria-label="Start new chat">
       + New Chat
     </button>
   </div>
@@ -76,10 +76,11 @@
       type="text"
       bind:value={searchQuery}
       placeholder="Search conversations..."
+      aria-label="Search conversations"
     />
   </div>
 
-  <div class="conversations-list">
+  <div class="conversations-list" role="list" aria-label="Conversation history">
     {#each filteredConversations as conv (conv.id)}
       <div
         class="conversation-item"
@@ -88,9 +89,11 @@
         tabindex="0"
         onclick={() => onSelect(conv.id)}
         onkeydown={(e) => e.key === 'Enter' && onSelect(conv.id)}
+        aria-label="Open conversation: {conv.title}"
+        aria-current={activeConversationId === conv.id ? "true" : undefined}
       >
         <span class="conv-title">{conv.title}</span>
-        <button class="delete-btn" onclick={(e) => handleDelete(e, conv.id)}>
+        <button class="delete-btn" onclick={(e) => handleDelete(e, conv.id)} aria-label="Delete conversation: {conv.title}">
           ×
         </button>
       </div>
@@ -99,11 +102,11 @@
 
   <div class="sidebar-footer">
     {#if updateInfo}
-      <a class="update-banner" href={updateInfo.download_url} target="_blank" rel="noopener">
+      <a class="update-banner" href={updateInfo.download_url} target="_blank" rel="noopener" aria-label="Update available: version {updateInfo.latest_version}">
         Update available: v{updateInfo.latest_version}
       </a>
     {/if}
-    <button class="settings-btn" onclick={openSettings}>
+    <button class="settings-btn" onclick={openSettings} aria-label="Open settings">
       Settings
     </button>
   </div>

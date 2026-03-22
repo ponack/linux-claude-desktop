@@ -5,7 +5,7 @@
   import "katex/dist/katex.min.css";
   import { tick } from "svelte";
 
-  let { role, content, isStreaming, onEdit, onRegenerate, messageId, onPreviewArtifact } = $props();
+  let { role, content, isStreaming, onEdit, onRegenerate, messageId, onPreviewArtifact, onRetry } = $props();
   let messageEl;
   let isEditing = $state(false);
   let editText = $state("");
@@ -137,7 +137,7 @@
   });
 </script>
 
-<div class="message" class:user={role === "user"} class:assistant={role === "assistant"} class:error={role === "error"} bind:this={messageEl}>
+<div class="message" class:user={role === "user"} class:assistant={role === "assistant"} class:error={role === "error"} bind:this={messageEl} role="article" aria-label="{role === 'user' ? 'Your message' : role === 'assistant' ? 'Claude response' : 'Error message'}">
   <div class="message-header">
     {#if role === "user"}
       <span class="role-label">You</span>
@@ -167,6 +167,9 @@
     <div class="message-content">
       {#if role === "error"}
         <p class="error-text">{content}</p>
+        {#if onRetry}
+          <button class="retry-btn" onclick={onRetry} aria-label="Retry sending message">Retry</button>
+        {/if}
       {:else}
         {@html renderedHtml}
       {/if}
@@ -175,7 +178,7 @@
     {#if !isStreaming && role !== "error"}
       <div class="message-actions">
         {#if role === "user" && onEdit}
-          <button class="action-btn" onclick={startEdit} title="Edit message">
+          <button class="action-btn" onclick={startEdit} title="Edit message" aria-label="Edit message">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -183,7 +186,7 @@
           </button>
         {/if}
         {#if role === "assistant" && onRegenerate}
-          <button class="action-btn" onclick={() => onRegenerate(messageId)} title="Regenerate">
+          <button class="action-btn" onclick={() => onRegenerate(messageId)} title="Regenerate" aria-label="Regenerate response">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="23 4 23 10 17 10"/>
               <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
@@ -243,6 +246,20 @@
   .error-text {
     color: var(--danger);
     font-size: 13px;
+  }
+
+  .retry-btn {
+    margin-top: 8px;
+    padding: 4px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    background: var(--danger);
+    color: white;
+    transition: opacity 0.15s;
+  }
+
+  .retry-btn:hover {
+    opacity: 0.85;
   }
 
   .streaming-indicator {

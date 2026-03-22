@@ -226,9 +226,35 @@
     catch (e) { error = String(e); }
   }
 
+  function validateSettings() {
+    if (provider === "anthropic" && !apiKey.trim()) {
+      return "Anthropic API key is required. Get one at console.anthropic.com";
+    }
+    if (provider === "anthropic" && !apiKey.trim().startsWith("sk-ant-")) {
+      return "Anthropic API key should start with 'sk-ant-'";
+    }
+    if (provider === "openai" && !openaiApiKey.trim()) {
+      return "OpenAI API key is required.";
+    }
+    if (provider === "openai" && openaiBaseUrl.trim() && !openaiBaseUrl.trim().startsWith("http")) {
+      return "OpenAI base URL must start with http:// or https://";
+    }
+    if (provider === "ollama" && ollamaBaseUrl.trim() && !ollamaBaseUrl.trim().startsWith("http")) {
+      return "Ollama URL must start with http:// or https://";
+    }
+    return null;
+  }
+
   async function save() {
     error = "";
     saved = false;
+
+    const validationError = validateSettings();
+    if (validationError) {
+      error = validationError;
+      return;
+    }
+
     try {
       await invoke("set_provider", { provider });
       await invoke("set_api_key", { key: apiKey });
@@ -332,7 +358,7 @@
 <div class="settings">
   <div class="settings-header">
     <h2>Settings</h2>
-    <button class="close-btn" onclick={onClose}>Back to Chat</button>
+    <button class="close-btn" onclick={onClose} aria-label="Back to chat">Back to Chat</button>
   </div>
 
   <div class="settings-body">

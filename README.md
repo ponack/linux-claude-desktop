@@ -186,6 +186,14 @@ ubuntu-claude-desktop/
 - [x] Custom CSS themes with presets (Nord, Solarized, Monokai, Dracula)
 - [x] Prompt library/templates
 
+### Phase 4.5 — Polish Pass
+- [ ] Accessibility (aria-labels, aria-live regions, focus management)
+- [ ] Active model indicator in chat header
+- [ ] Settings validation (API keys, URLs)
+- [ ] Error handling improvements (retry failed sends, surface command errors)
+- [ ] Preserve partial content on streaming errors
+- [ ] UX discoverability (tooltips, hints)
+
 ### Phase 5 — Desktop Integration
 - [ ] Global hotkey to summon app (Super+Shift+C)
 - [ ] Screenshot-to-Claude (capture region, send via vision API)
@@ -205,6 +213,13 @@ ubuntu-claude-desktop/
 - [ ] Workspace profiles (per-project API keys, models, prompts)
 - [ ] Conversation analytics and token usage tracking
 - [ ] Multi-window support
+
+### Phase 7 — Scale & Reliability
+- [ ] Conversation pagination / virtual scroll
+- [ ] Database backup and restore
+- [ ] Token usage tracking per conversation
+- [ ] Performance profiling and optimization
+- [ ] Offline mode (queue messages when disconnected)
 
 ## Tech Stack
 
