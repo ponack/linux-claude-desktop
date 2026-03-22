@@ -146,6 +146,21 @@ impl Database {
         Ok(())
     }
 
+    pub fn delete_messages_from(&self, conversation_id: &str, message_id: &str) -> Result<(), rusqlite::Error> {
+        // Get the created_at of the target message
+        let created_at: String = self.conn.query_row(
+            "SELECT created_at FROM messages WHERE id = ?1",
+            params![message_id],
+            |row| row.get(0),
+        )?;
+        // Delete this message and all after it
+        self.conn.execute(
+            "DELETE FROM messages WHERE conversation_id = ?1 AND created_at >= ?2",
+            params![conversation_id, &created_at],
+        )?;
+        Ok(())
+    }
+
     pub fn update_message_content(&self, id: &str, content: &str) -> Result<(), rusqlite::Error> {
         self.conn.execute(
             "UPDATE messages SET content = ?1 WHERE id = ?2",
@@ -207,6 +222,24 @@ pub fn get_model(state: tauri::State<AppState>) -> Result<String, String> {
 #[tauri::command]
 pub fn set_model(state: tauri::State<AppState>, model: String) -> Result<(), String> {
     state.db.lock().unwrap().set_setting("model", &model).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_messages_from(state: tauri::State<AppState>, conversation_id: String, message_id: String) -> Result<(), String> {
+    state.db.lock().unwrap().delete_messages_from(&conversation_id, &message_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_theme(state: tauri::State<AppState>) -> Result<String, String> {
+    state.db.lock().unwrap()
+        .get_setting("theme")
+        .map_err(|e| e.to_string())
+        .map(|v| v.unwrap_or_else(|| "dark".to_string()))
+}
+
+#[tauri::command]
+pub fn set_theme(state: tauri::State<AppState>, theme: String) -> Result<(), String> {
+    state.db.lock().unwrap().set_setting("theme", &theme).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

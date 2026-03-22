@@ -1,6 +1,7 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
+  import { open } from "@tauri-apps/plugin-dialog";
   import { onMount, tick } from "svelte";
   import MessageBubble from "./MessageBubble.svelte";
 
@@ -10,6 +11,7 @@
   let inputText = $state("");
   let isStreaming = $state(false);
   let streamingMessageId = $state(null);
+  let attachments = $state([]);
   let messagesContainer;
 
   async function loadMessages() {
@@ -46,7 +48,6 @@
       } else if (eventType === "error") {
         isStreaming = false;
         streamingMessageId = null;
-        // Show error as a system message
         messages = [
           ...messages,
           {
@@ -73,18 +74,51 @@
     }
   }
 
+  async function addAttachment() {
+    const files = await open({
+      multiple: true,
+      filters: [{
+        name: "Images",
+        extensions: ["png", "jpg", "jpeg", "gif", "webp"],
+      }],
+    });
+    if (!files) return;
+    const fileList = Array.isArray(files) ? files : [files];
+    for (const file of fileList) {
+      const path = typeof file === "string" ? file : file.path;
+      const ext = path.split(".").pop().toLowerCase();
+      const mediaTypes = {
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
+      };
+      attachments = [...attachments, {
+        path,
+        media_type: mediaTypes[ext] || "image/png",
+        name: path.split("/").pop(),
+      }];
+    }
+  }
+
+  function removeAttachment(index) {
+    attachments = attachments.filter((_, i) => i !== index);
+  }
+
   async function sendMessage() {
     const text = inputText.trim();
-    if (!text || isStreaming) return;
+    if ((!text && attachments.length === 0) || isStreaming) return;
 
     inputText = "";
+    const currentAttachments = [...attachments];
+    attachments = [];
     let convId = conversationId;
 
-    // Create conversation if needed
     let isNewConversation = false;
     if (!convId) {
       try {
-        const title = text.length > 40 ? text.substring(0, 40) + "..." : text;
+        const title = text.length > 40 ? text.substring(0, 40) + "..." : text || "Image conversation";
         convId = await invoke("create_conversation", { title });
         onConversationCreated(convId);
         isNewConversation = true;
@@ -97,22 +131,21 @@
     isStreaming = true;
 
     try {
+      const apiAttachments = currentAttachments.map(({ path, media_type }) => ({ path, media_type }));
       const assistantMsgId = await invoke("send_message", {
         conversationId: convId,
         content: text,
+        attachments: apiAttachments.length > 0 ? apiAttachments : null,
       });
 
       streamingMessageId = assistantMsgId;
-
-      // Reload messages to get the saved user message + placeholder
       await loadMessages();
       scrollToBottom();
 
-      // Generate AI title for new conversations (fire and forget)
       if (isNewConversation) {
         invoke("generate_title", {
           conversationId: convId,
-          userMessage: text,
+          userMessage: text || "Shared an image",
         }).then(() => {
           onConversationCreated(convId);
         }).catch((e) => console.error("Title generation failed:", e));
@@ -130,6 +163,49 @@
         },
       ];
       scrollToBottom();
+    }
+  }
+
+  async function handleEdit(messageId, newContent) {
+    if (!conversationId || isStreaming) return;
+    try {
+      // Delete this message and everything after it
+      await invoke("delete_messages_from", { conversationId, messageId });
+      await loadMessages();
+      // Re-send with the edited content
+      inputText = newContent;
+      await sendMessage();
+    } catch (e) {
+      console.error("Edit failed:", e);
+    }
+  }
+
+  async function handleRegenerate(messageId) {
+    if (!conversationId || isStreaming) return;
+    try {
+      // Find the user message before this assistant message
+      const idx = messages.findIndex((m) => m.id === messageId);
+      if (idx <= 0) return;
+      const userMsg = messages[idx - 1];
+      if (userMsg.role !== "user") return;
+
+      // Delete from the assistant message onwards
+      await invoke("delete_messages_from", { conversationId, messageId });
+      await loadMessages();
+
+      // Re-send the original user message
+      isStreaming = true;
+      const assistantMsgId = await invoke("send_message", {
+        conversationId,
+        content: userMsg.content,
+        attachments: null,
+      });
+      streamingMessageId = assistantMsgId;
+      await loadMessages();
+      scrollToBottom();
+    } catch (e) {
+      isStreaming = false;
+      console.error("Regenerate failed:", e);
     }
   }
 
@@ -162,13 +238,31 @@
       <MessageBubble
         role={message.role}
         content={message.content}
+        messageId={message.id}
         isStreaming={isStreaming && message.id === streamingMessageId}
+        onEdit={handleEdit}
+        onRegenerate={handleRegenerate}
       />
     {/each}
   </div>
 
   <div class="input-area">
+    {#if attachments.length > 0}
+      <div class="attachments-preview">
+        {#each attachments as att, i}
+          <div class="attachment-chip">
+            <span class="att-name">{att.name}</span>
+            <button class="att-remove" onclick={() => removeAttachment(i)}>x</button>
+          </div>
+        {/each}
+      </div>
+    {/if}
     <div class="input-wrapper">
+      <button class="attach-btn" onclick={addAttachment} disabled={isStreaming} title="Attach image">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+        </svg>
+      </button>
       <textarea
         bind:value={inputText}
         onkeydown={handleKeydown}
@@ -182,7 +276,7 @@
         <button
           class="send-btn"
           onclick={sendMessage}
-          disabled={!inputText.trim()}
+          disabled={!inputText.trim() && attachments.length === 0}
         >
           Send
         </button>
@@ -229,6 +323,41 @@
     background: var(--bg-secondary);
   }
 
+  .attachments-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .attachment-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .att-name {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .att-remove {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 0 2px;
+  }
+
+  .att-remove:hover {
+    color: var(--danger);
+  }
+
   .input-wrapper {
     display: flex;
     align-items: flex-end;
@@ -237,6 +366,25 @@
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 8px 12px;
+  }
+
+  .attach-btn {
+    color: var(--text-muted);
+    padding: 4px;
+    border-radius: 6px;
+    transition: color 0.15s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .attach-btn:hover:not(:disabled) {
+    color: var(--accent);
+  }
+
+  .attach-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 
   textarea {
