@@ -910,34 +910,44 @@ pub async fn install_update(deb_path: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Restart the application by spawning a detached new process and exiting
+/// Restart the application by spawning a delayed, fully detached new process and exiting
 #[tauri::command]
-pub async fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn restart_app(_app: tauri::AppHandle) -> Result<(), String> {
     let exe = std::env::current_exe()
         .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
-    // Use setsid to fully detach the child from this process group
-    // so it survives when the parent exits
+    // Use setsid + sh with a delay so the old process fully exits before the new one starts
+    let exe_str = exe.to_string_lossy().to_string();
     std::process::Command::new("setsid")
-        .arg(&exe)
+        .arg("sh")
+        .arg("-c")
+        .arg(format!("sleep 1 && exec \"{}\"", exe_str))
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
         .map_err(|e| format!("Failed to restart: {}", e))?;
 
-    app.exit(0);
-
-    Ok(())
+    // Hard exit — app.exit(0) can be intercepted by window close handlers
+    std::process::exit(0);
 }
 
 /// Get app info for the About section
 #[tauri::command]
 pub fn get_app_info() -> Result<AppInfo, String> {
+    let distro = std::fs::read_to_string("/etc/os-release")
+        .ok()
+        .and_then(|contents| {
+            contents.lines()
+                .find(|l| l.starts_with("PRETTY_NAME="))
+                .map(|l| l.trim_start_matches("PRETTY_NAME=").trim_matches('"').to_string())
+        })
+        .unwrap_or_else(|| "Linux".to_string());
+
     Ok(AppInfo {
         version: CURRENT_VERSION.to_string(),
         arch: std::env::consts::ARCH.to_string(),
-        os: std::env::consts::OS.to_string(),
+        os: distro,
     })
 }
 
