@@ -49,6 +49,10 @@
 
 <aside class="sidebar">
   <div class="sidebar-header">
+    <div class="sidebar-brand">
+      <img src="/assets/logo.svg" alt="UCD" class="sidebar-logo" />
+      <span class="sidebar-title">UCD</span>
+    </div>
     <button class="new-chat-btn" onclick={onNewChat}>
       + New Chat
     </button>
@@ -101,6 +105,28 @@
   .sidebar-header {
     padding: 12px;
     border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 2px;
+  }
+
+  .sidebar-logo {
+    width: 28px;
+    height: 28px;
+  }
+
+  .sidebar-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.5px;
   }
 
   .new-chat-btn {

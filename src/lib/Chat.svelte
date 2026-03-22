@@ -229,6 +229,7 @@
   <div class="messages" bind:this={messagesContainer}>
     {#if messages.length === 0 && !conversationId}
       <div class="empty-state">
+        <img src="/assets/logo.svg" alt="UCD" class="empty-logo" />
         <h2>Ubuntu Claude Desktop</h2>
         <p>Start a conversation by typing a message below.</p>
       </div>
@@ -309,6 +310,12 @@
     height: 100%;
     color: var(--text-muted);
     gap: 8px;
+  }
+
+  .empty-logo {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 8px;
   }
 
   .empty-state h2 {
