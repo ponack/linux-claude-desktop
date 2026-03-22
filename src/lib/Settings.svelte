@@ -51,6 +51,7 @@
   // About
   let appVersion = $state("");
   let appArch = $state("");
+  let appOs = $state("");
 
   const anthropicModels = [
     { id: "claude-opus-4-6", name: "Claude Opus 4.6 (Most capable)" },
@@ -95,6 +96,7 @@
         const info = await invoke("get_app_info");
         appVersion = info.version;
         appArch = info.arch;
+        appOs = info.os;
       } catch (_) {}
 
       if (provider === "ollama") {
@@ -617,7 +619,7 @@
       <h3>About</h3>
       <div class="about-info">
         <span>Version: <strong>{appVersion || "..."}</strong></span>
-        <span>Architecture: <strong>{appArch || "..."}</strong></span>
+        <span>OS: <strong>{appOs || "..."}</strong> ({appArch || "..."})</span>
         <a href="https://github.com/ponack/ubuntu-claude-desktop" target="_blank" rel="noopener noreferrer">
           GitHub Repository
         </a>
