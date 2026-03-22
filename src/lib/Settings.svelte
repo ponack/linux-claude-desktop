@@ -7,6 +7,7 @@
   let apiKey = $state("");
   let model = $state("claude-sonnet-4-6");
   let systemPrompt = $state("");
+  let theme = $state("dark");
   let saved = $state(false);
   let error = $state("");
 
@@ -23,6 +24,7 @@
       model = await invoke("get_model");
       const sp = await invoke("get_system_prompt");
       if (sp) systemPrompt = sp;
+      theme = await invoke("get_theme");
     } catch (e) {
       console.error("Failed to load settings:", e);
     }
@@ -35,6 +37,8 @@
       await invoke("set_api_key", { key: apiKey });
       await invoke("set_model", { model });
       await invoke("set_system_prompt", { prompt: systemPrompt });
+      await invoke("set_theme", { theme });
+      document.documentElement.setAttribute("data-theme", theme);
       saved = true;
       setTimeout(() => (saved = false), 2000);
     } catch (e) {
@@ -70,6 +74,14 @@
         {#each models as m}
           <option value={m.id}>{m.name}</option>
         {/each}
+      </select>
+    </div>
+
+    <div class="setting-group">
+      <label for="theme">Theme</label>
+      <select id="theme" bind:value={theme}>
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
       </select>
     </div>
 

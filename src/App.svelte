@@ -1,4 +1,6 @@
 <script>
+  import { invoke } from "@tauri-apps/api/core";
+  import { onMount } from "svelte";
   import Sidebar from "./lib/Sidebar.svelte";
   import Chat from "./lib/Chat.svelte";
   import Settings from "./lib/Settings.svelte";
@@ -6,6 +8,15 @@
   let currentView = $state("chat");
   let activeConversationId = $state(null);
   let sidebarRefresh = $state(0);
+
+  onMount(async () => {
+    try {
+      const theme = await invoke("get_theme");
+      document.documentElement.setAttribute("data-theme", theme);
+    } catch (e) {
+      console.error("Failed to load theme:", e);
+    }
+  });
 
   function onSelectConversation(id) {
     activeConversationId = id;

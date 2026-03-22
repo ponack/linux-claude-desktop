@@ -1,10 +1,14 @@
 <script>
   import { marked } from "marked";
   import hljs from "highlight.js";
-  import { onMount, tick } from "svelte";
+  import katex from "katex";
+  import "katex/dist/katex.min.css";
+  import { tick } from "svelte";
 
-  let { role, content, isStreaming } = $props();
+  let { role, content, isStreaming, onEdit, onRegenerate, messageId } = $props();
   let messageEl;
+  let isEditing = $state(false);
+  let editText = $state("");
 
   // Configure marked to use highlight.js
   marked.setOptions({
@@ -16,9 +20,64 @@
     },
   });
 
+  function renderLatex(text) {
+    if (!text) return "";
+    // Display math: $$...$$ or \[...\]
+    text = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, math) => {
+      try {
+        return katex.renderToString(math.trim(), { displayMode: true, throwOnError: false });
+      } catch { return _; }
+    });
+    text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => {
+      try {
+        return katex.renderToString(math.trim(), { displayMode: true, throwOnError: false });
+      } catch { return _; }
+    });
+    // Inline math: $...$ (not $$) or \(...\)
+    text = text.replace(/(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$/g, (_, math) => {
+      try {
+        return katex.renderToString(math.trim(), { displayMode: false, throwOnError: false });
+      } catch { return _; }
+    });
+    text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => {
+      try {
+        return katex.renderToString(math.trim(), { displayMode: false, throwOnError: false });
+      } catch { return _; }
+    });
+    return text;
+  }
+
   let renderedHtml = $derived(
-    role === "error" ? content : marked.parse(content || "")
+    role === "error" ? content : marked.parse(renderLatex(content || ""))
   );
+
+  function startEdit() {
+    editText = content;
+    isEditing = true;
+  }
+
+  function cancelEdit() {
+    isEditing = false;
+    editText = "";
+  }
+
+  function submitEdit() {
+    if (editText.trim() && onEdit) {
+      onEdit(messageId, editText.trim());
+    }
+    isEditing = false;
+    editText = "";
+  }
+
+  function handleEditKeydown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submitEdit();
+    }
+    if (e.key === "Escape") {
+      cancelEdit();
+    }
+  }
 
   // Add copy buttons to code blocks after render
   async function attachCopyButtons() {
@@ -61,13 +120,49 @@
       <span class="role-label error-label">Error</span>
     {/if}
   </div>
-  <div class="message-content">
-    {#if role === "error"}
-      <p class="error-text">{content}</p>
-    {:else}
-      {@html renderedHtml}
+
+  {#if isEditing}
+    <div class="edit-area">
+      <textarea
+        bind:value={editText}
+        onkeydown={handleEditKeydown}
+        rows="3"
+      ></textarea>
+      <div class="edit-actions">
+        <button class="edit-save" onclick={submitEdit}>Save & Send</button>
+        <button class="edit-cancel" onclick={cancelEdit}>Cancel</button>
+      </div>
+    </div>
+  {:else}
+    <div class="message-content">
+      {#if role === "error"}
+        <p class="error-text">{content}</p>
+      {:else}
+        {@html renderedHtml}
+      {/if}
+    </div>
+
+    {#if !isStreaming && role !== "error"}
+      <div class="message-actions">
+        {#if role === "user" && onEdit}
+          <button class="action-btn" onclick={startEdit} title="Edit message">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+        {/if}
+        {#if role === "assistant" && onRegenerate}
+          <button class="action-btn" onclick={() => onRegenerate(messageId)} title="Regenerate">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+            </svg>
+          </button>
+        {/if}
+      </div>
     {/if}
-  </div>
+  {/if}
 </div>
 
 <style>
@@ -133,8 +228,86 @@
     50% { opacity: 0.3; }
   }
 
+  .message-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .message:hover .message-actions {
+    opacity: 1;
+  }
+
+  .action-btn {
+    color: var(--text-muted);
+    padding: 3px 6px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+    display: flex;
+    align-items: center;
+  }
+
+  .action-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .edit-area {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .edit-area textarea {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: inherit;
+    resize: vertical;
+    outline: none;
+    min-height: 60px;
+  }
+
+  .edit-area textarea:focus {
+    border-color: var(--accent);
+  }
+
+  .edit-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .edit-save {
+    padding: 4px 12px;
+    background: var(--accent);
+    color: white;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+
+  .edit-save:hover {
+    background: var(--accent-hover);
+  }
+
+  .edit-cancel {
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .edit-cancel:hover {
+    background: var(--bg-tertiary);
+  }
+
   .message-content :global(pre) {
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--code-bg);
     padding: 12px;
     padding-top: 36px;
     border-radius: 8px;
@@ -149,7 +322,7 @@
   }
 
   .message-content :global(p code) {
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--code-inline-bg);
     padding: 2px 6px;
     border-radius: 4px;
   }

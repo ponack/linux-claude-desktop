@@ -7,10 +7,10 @@ use tauri::{Emitter, Manager};
 
 static STOP_FLAG: AtomicBool = AtomicBool::new(false);
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct ApiMessage {
     role: String,
-    content: String,
+    content: serde_json::Value,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -18,6 +18,47 @@ struct StreamEvent {
     event: String, // "delta", "done", "error"
     content: String,
     message_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Attachment {
+    path: String,
+    media_type: String,
+}
+
+fn encode_file_to_base64(path: &str) -> Result<String, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    Ok(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
+}
+
+fn build_content_blocks(text: &str, attachments: &[Attachment]) -> serde_json::Value {
+    if attachments.is_empty() {
+        return serde_json::json!(text);
+    }
+
+    let mut blocks: Vec<serde_json::Value> = Vec::new();
+
+    for att in attachments {
+        if let Ok(data) = encode_file_to_base64(&att.path) {
+            blocks.push(serde_json::json!({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": &att.media_type,
+                    "data": data
+                }
+            }));
+        }
+    }
+
+    if !text.is_empty() {
+        blocks.push(serde_json::json!({
+            "type": "text",
+            "text": text
+        }));
+    }
+
+    serde_json::json!(blocks)
 }
 
 #[tauri::command]
@@ -31,6 +72,7 @@ pub async fn send_message(
     state: tauri::State<'_, AppState>,
     conversation_id: String,
     content: String,
+    attachments: Option<Vec<Attachment>>,
 ) -> Result<String, String> {
     STOP_FLAG.store(false, Ordering::SeqCst);
 
@@ -54,26 +96,50 @@ pub async fn send_message(
             .map_err(|e| e.to_string())?
     };
 
+    let atts = attachments.unwrap_or_default();
+
+    // Build display text for DB (include attachment filenames)
+    let display_content = if atts.is_empty() {
+        content.clone()
+    } else {
+        let filenames: Vec<String> = atts.iter().map(|a| {
+            std::path::Path::new(&a.path)
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_else(|| "file".to_string())
+        }).collect();
+        format!("[Attached: {}]\n{}", filenames.join(", "), content)
+    };
+
     // Save user message
     let user_msg_id = uuid::Uuid::new_v4().to_string();
     {
         let db = state.db.lock().unwrap();
-        db.insert_message(&user_msg_id, &conversation_id, "user", &content)
+        db.insert_message(&user_msg_id, &conversation_id, "user", &display_content)
             .map_err(|e| e.to_string())?;
     }
 
     // Load conversation history
-    let messages: Vec<ApiMessage> = {
+    let mut messages: Vec<ApiMessage> = {
         let db = state.db.lock().unwrap();
         db.list_messages(&conversation_id)
             .map_err(|e| e.to_string())?
             .into_iter()
             .map(|m| ApiMessage {
                 role: m.role,
-                content: m.content,
+                content: serde_json::json!(m.content),
             })
             .collect()
     };
+
+    // Replace the last user message content with multimodal blocks if there are attachments
+    if !atts.is_empty() {
+        if let Some(last) = messages.last_mut() {
+            if last.role == "user" {
+                last.content = build_content_blocks(&content, &atts);
+            }
+        }
+    }
 
     // Create placeholder for assistant message
     let assistant_msg_id = uuid::Uuid::new_v4().to_string();
@@ -163,7 +229,6 @@ pub async fn send_message(
                                         continue;
                                     }
                                     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                                        // Extract text delta
                                         if let Some(delta) = parsed.get("delta") {
                                             if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
                                                 full_content.push_str(text);
@@ -174,7 +239,6 @@ pub async fn send_message(
                                                 });
                                             }
                                         }
-                                        // Check for message_stop
                                         if parsed.get("type").and_then(|t| t.as_str()) == Some("message_stop") {
                                             let _ = app_clone.emit("stream-event", StreamEvent {
                                                 event: "done".into(),
@@ -261,7 +325,6 @@ pub async fn generate_title(
         .trim_matches('"')
         .to_string();
 
-    // Update the conversation title in DB
     {
         let db = state.db.lock().unwrap();
         db.rename_conversation_by_id(&conversation_id, &title)

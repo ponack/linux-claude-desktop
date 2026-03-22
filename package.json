@@ -10,7 +10,9 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@tauri-apps/plugin-dialog": "^2.6.0",
     "highlight.js": "^11.11.1",
+    "katex": "^0.16.40",
     "marked": "^15.0.0"
   },
   "devDependencies": {
