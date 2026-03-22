@@ -186,13 +186,14 @@ ubuntu-claude-desktop/
 - [x] Custom CSS themes with presets (Nord, Solarized, Monokai, Dracula)
 - [x] Prompt library/templates
 
-### Phase 4.5 — Polish Pass
-- [ ] Accessibility (aria-labels, aria-live regions, focus management)
-- [ ] Active model indicator in chat header
-- [ ] Settings validation (API keys, URLs)
-- [ ] Error handling improvements (retry failed sends, surface command errors)
-- [ ] Preserve partial content on streaming errors
-- [ ] UX discoverability (tooltips, hints)
+### Phase 4.5 — Polish Pass ✅
+- [x] Accessibility (aria-labels, aria-live regions, focus management)
+- [x] Active model indicator in chat header
+- [x] Settings validation (API keys, URLs)
+- [x] Error handling improvements (retry failed sends, surface command errors)
+- [x] Preserve partial content on streaming errors
+- [x] Professional auto-update system (configurable intervals, download progress, pkexec install, restart)
+- [x] About section (version, OS distro, architecture, repo link)
 
 ### Phase 5 — Desktop Integration
 - [ ] Global hotkey to summon app (Super+Shift+C)
