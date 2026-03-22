@@ -910,25 +910,38 @@ pub async fn install_update(deb_path: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Restart the application by spawning a delayed, fully detached new process and exiting
+/// Restart the application by writing a relaunch script and executing it fully detached
 #[tauri::command]
 pub async fn restart_app(_app: tauri::AppHandle) -> Result<(), String> {
     let exe = std::env::current_exe()
         .map_err(|e| format!("Failed to get executable path: {}", e))?;
-
-    // Use setsid + sh with a delay so the old process fully exits before the new one starts
     let exe_str = exe.to_string_lossy().to_string();
-    std::process::Command::new("setsid")
-        .arg("sh")
-        .arg("-c")
-        .arg(format!("sleep 1 && exec \"{}\"", exe_str))
+    let pid = std::process::id();
+
+    // Write a script that waits for this process to die, then launches the new one
+    let script = format!(
+        "#!/bin/sh\nwhile kill -0 {} 2>/dev/null; do sleep 0.2; done\nsleep 0.5\nexec \"{}\"\n",
+        pid, exe_str
+    );
+    let script_path = "/tmp/ucd-restart.sh";
+    std::fs::write(script_path, &script)
+        .map_err(|e| format!("Failed to write restart script: {}", e))?;
+
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(script_path, std::fs::Permissions::from_mode(0o755))
+        .map_err(|e| format!("Failed to set script permissions: {}", e))?;
+
+    // Launch the script in a fully detached session via nohup + setsid
+    std::process::Command::new("nohup")
+        .arg("setsid")
+        .arg(script_path)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|e| format!("Failed to restart: {}", e))?;
+        .map_err(|e| format!("Failed to spawn restart script: {}", e))?;
 
-    // Hard exit — app.exit(0) can be intercepted by window close handlers
+    // Hard exit the current process
     std::process::exit(0);
 }
 

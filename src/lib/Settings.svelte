@@ -46,7 +46,7 @@
   let newCmdDescription = $state("");
 
   // Update settings
-  let updateInterval = $state("startup");
+  let updateInterval = $state("86400000");
 
   // About
   let appVersion = $state("");
@@ -448,7 +448,7 @@
 
     <div class="setting-group">
       <label for="update-interval">Check for Updates</label>
-      <select id="update-interval" bind:value={updateInterval}>
+      <select id="update-interval" bind:value={updateInterval} onchange={() => invoke("set_update_interval", { interval: updateInterval })}>
         <option value="never">Never</option>
         <option value="startup">On startup only</option>
         <option value="1800000">Every 30 minutes</option>
