@@ -4,6 +4,7 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { onMount, tick } from "svelte";
   import MessageBubble from "./MessageBubble.svelte";
+  import ArtifactPreview from "./ArtifactPreview.svelte";
 
   let { conversationId, onConversationCreated } = $props();
 
@@ -12,17 +13,32 @@
   let isStreaming = $state(false);
   let streamingMessageId = $state(null);
   let attachments = $state([]);
+  let activeArtifact = $state(null);
+  let projects = $state([]);
+  let currentProjectId = $state(null);
   let messagesContainer;
 
   async function loadMessages() {
     if (!conversationId) {
       messages = [];
+      activeArtifact = null;
+      currentProjectId = null;
       return;
     }
     try {
       messages = await invoke("get_messages", { conversationId });
+      const projId = await invoke("get_conversation_project", { conversationId });
+      currentProjectId = projId || null;
     } catch (e) {
       console.error("Failed to load messages:", e);
+    }
+  }
+
+  async function loadProjects() {
+    try {
+      projects = await invoke("get_projects");
+    } catch (e) {
+      console.error("Failed to load projects:", e);
     }
   }
 
@@ -30,6 +46,21 @@
     conversationId;
     loadMessages();
   });
+
+  onMount(() => {
+    loadProjects();
+  });
+
+  async function handleProjectChange(e) {
+    if (!conversationId) return;
+    const projectId = e.target.value || null;
+    try {
+      await invoke("set_conversation_project", { conversationId, projectId });
+      currentProjectId = projectId;
+    } catch (err) {
+      console.error("Failed to set project:", err);
+    }
+  }
 
   onMount(() => {
     const unlisten = listen("stream-event", (event) => {
@@ -217,6 +248,34 @@
     }
   }
 
+  async function exportConversation(format) {
+    if (!conversationId) return;
+    try {
+      const content = await invoke("export_conversation", {
+        conversationId,
+        format,
+      });
+      const ext = format === "json" ? "json" : "md";
+      const blob = new Blob([content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `conversation.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Export failed:", e);
+    }
+  }
+
+  function handlePreviewArtifact(artifact) {
+    activeArtifact = artifact;
+  }
+
+  function closeArtifact() {
+    activeArtifact = null;
+  }
+
   function handleKeydown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -226,28 +285,56 @@
 </script>
 
 <div class="chat-container">
-  <div class="messages" bind:this={messagesContainer}>
-    {#if messages.length === 0 && !conversationId}
-      <div class="empty-state">
-        <img src="/assets/logo.svg" alt="UCD" class="empty-logo" />
-        <h2>Ubuntu Claude Desktop</h2>
-        <p>Start a conversation by typing a message below.</p>
+  <div class="chat-main" class:has-artifact={activeArtifact}>
+    {#if conversationId && messages.length > 0}
+      <div class="chat-toolbar">
+        {#if projects.length > 0}
+          <select class="project-select" value={currentProjectId || ""} onchange={handleProjectChange}>
+            <option value="">No project</option>
+            {#each projects as project (project.id)}
+              <option value={project.id}>{project.name}</option>
+            {/each}
+          </select>
+        {/if}
+        <div class="toolbar-actions">
+          <button class="toolbar-btn" onclick={() => exportConversation("markdown")} title="Export as Markdown">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            .md
+          </button>
+          <button class="toolbar-btn" onclick={() => exportConversation("json")} title="Export as JSON">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            .json
+          </button>
+        </div>
       </div>
     {/if}
+    <div class="messages" bind:this={messagesContainer}>
+      {#if messages.length === 0 && !conversationId}
+        <div class="empty-state">
+          <img src="/assets/logo.svg" alt="UCD" class="empty-logo" />
+          <h2>Ubuntu Claude Desktop</h2>
+          <p>Start a conversation by typing a message below.</p>
+        </div>
+      {/if}
 
-    {#each messages as message (message.id)}
-      <MessageBubble
-        role={message.role}
-        content={message.content}
-        messageId={message.id}
-        isStreaming={isStreaming && message.id === streamingMessageId}
-        onEdit={handleEdit}
-        onRegenerate={handleRegenerate}
-      />
-    {/each}
-  </div>
+      {#each messages as message (message.id)}
+        <MessageBubble
+          role={message.role}
+          content={message.content}
+          messageId={message.id}
+          isStreaming={isStreaming && message.id === streamingMessageId}
+          onEdit={handleEdit}
+          onRegenerate={handleRegenerate}
+          onPreviewArtifact={handlePreviewArtifact}
+        />
+      {/each}
+    </div>
 
-  <div class="input-area">
+    <div class="input-area">
     {#if attachments.length > 0}
       <div class="attachments-preview">
         {#each attachments as att, i}
@@ -284,13 +371,71 @@
       {/if}
     </div>
   </div>
+  </div>
+
+  {#if activeArtifact}
+    <ArtifactPreview artifact={activeArtifact} onClose={closeArtifact} />
+  {/if}
 </div>
 
 <style>
   .chat-container {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     height: 100%;
+  }
+
+  .chat-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .chat-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 6px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .toolbar-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+  }
+
+  .project-select {
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    outline: none;
+    cursor: pointer;
+  }
+
+  .project-select:focus {
+    border-color: var(--accent);
   }
 
   .messages {

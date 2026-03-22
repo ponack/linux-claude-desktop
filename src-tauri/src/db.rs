@@ -37,7 +37,8 @@ impl Database {
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                project_id TEXT
             );
             CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY,
@@ -51,8 +52,34 @@ impl Database {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                context TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
             PRAGMA foreign_keys = ON;"
         )?;
+
+        // Migration: add project_id column if missing (existing DBs)
+        let has_project_id: bool = conn
+            .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='conversations'")
+            .and_then(|mut s| s.query_row([], |row| row.get::<_, String>(0)))
+            .map(|sql| sql.contains("project_id"))
+            .unwrap_or(false);
+        if !has_project_id {
+            conn.execute_batch("ALTER TABLE conversations ADD COLUMN project_id TEXT;").ok();
+        }
+
+        // Migration: create projects table if missing
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                context TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );"
+        ).ok();
 
         Ok(Self { conn })
     }
@@ -168,6 +195,92 @@ impl Database {
         )?;
         Ok(())
     }
+
+    pub fn list_projects(&self) -> Result<Vec<Project>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, context, created_at FROM projects ORDER BY name ASC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Project {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                context: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn insert_project(&self, id: &str, name: &str, context: &str) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO projects (id, name, context, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![id, name, context, &now],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_project(&self, id: &str, name: &str, context: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "UPDATE projects SET name = ?1, context = ?2 WHERE id = ?3",
+            params![name, context, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_project_by_id(&self, id: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute("UPDATE conversations SET project_id = NULL WHERE project_id = ?1", params![id])?;
+        self.conn.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn get_project_context(&self, project_id: &str) -> Result<Option<String>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare("SELECT context FROM projects WHERE id = ?1")?;
+        let mut rows = stmt.query_map(params![project_id], |row| row.get::<_, String>(0))?;
+        match rows.next() {
+            Some(Ok(val)) if !val.is_empty() => Ok(Some(val)),
+            _ => Ok(None),
+        }
+    }
+
+    pub fn set_conversation_project(&self, conversation_id: &str, project_id: Option<&str>) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "UPDATE conversations SET project_id = ?1 WHERE id = ?2",
+            params![project_id, conversation_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_conversation_project_id(&self, conversation_id: &str) -> Result<Option<String>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare("SELECT project_id FROM conversations WHERE id = ?1")?;
+        let mut rows = stmt.query_map(params![conversation_id], |row| row.get::<_, Option<String>>(0))?;
+        match rows.next() {
+            Some(Ok(val)) => Ok(val),
+            _ => Ok(None),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Project {
+    pub id: String,
+    pub name: String,
+    pub context: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExportedConversation {
+    pub title: String,
+    pub created_at: String,
+    pub messages: Vec<ExportedMessage>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExportedMessage {
+    pub role: String,
+    pub content: String,
+    pub created_at: String,
 }
 
 // --- Tauri commands ---
@@ -248,10 +361,106 @@ pub fn get_system_prompt(state: tauri::State<AppState>) -> Result<Option<String>
 }
 
 #[tauri::command]
+pub fn get_mcp_servers(state: tauri::State<AppState>) -> Result<Vec<crate::mcp::McpServerConfig>, String> {
+    let db = state.db.lock().unwrap();
+    let json = db.get_setting("mcp_servers").map_err(|e| e.to_string())?;
+    match json {
+        Some(s) => serde_json::from_str(&s).map_err(|e| e.to_string()),
+        None => Ok(Vec::new()),
+    }
+}
+
+#[tauri::command]
+pub fn set_mcp_servers(state: tauri::State<AppState>, servers: Vec<crate::mcp::McpServerConfig>) -> Result<(), String> {
+    let db = state.db.lock().unwrap();
+    let json = serde_json::to_string(&servers).map_err(|e| e.to_string())?;
+    db.set_setting("mcp_servers", &json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn set_system_prompt(state: tauri::State<AppState>, prompt: String) -> Result<(), String> {
     if prompt.trim().is_empty() {
         state.db.lock().unwrap().remove_setting("system_prompt").map_err(|e| e.to_string())
     } else {
         state.db.lock().unwrap().set_setting("system_prompt", &prompt).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub fn get_projects(state: tauri::State<AppState>) -> Result<Vec<Project>, String> {
+    state.db.lock().unwrap().list_projects().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_project(state: tauri::State<AppState>, name: String, context: String) -> Result<String, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    state.db.lock().unwrap().insert_project(&id, &name, &context).map_err(|e| e.to_string())?;
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn update_project(state: tauri::State<AppState>, id: String, name: String, context: String) -> Result<(), String> {
+    state.db.lock().unwrap().update_project(&id, &name, &context).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_project(state: tauri::State<AppState>, id: String) -> Result<(), String> {
+    state.db.lock().unwrap().delete_project_by_id(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_conversation_project(state: tauri::State<AppState>, conversation_id: String, project_id: Option<String>) -> Result<(), String> {
+    state.db.lock().unwrap().set_conversation_project(&conversation_id, project_id.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_conversation_project(state: tauri::State<AppState>, conversation_id: String) -> Result<Option<String>, String> {
+    state.db.lock().unwrap().get_conversation_project_id(&conversation_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn export_conversation(state: tauri::State<AppState>, conversation_id: String, format: String) -> Result<String, String> {
+    let db = state.db.lock().unwrap();
+
+    let conv: Conversation = db.conn.query_row(
+        "SELECT id, title, created_at, updated_at FROM conversations WHERE id = ?1",
+        params![conversation_id],
+        |row| Ok(Conversation {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            created_at: row.get(2)?,
+            updated_at: row.get(3)?,
+        }),
+    ).map_err(|e| e.to_string())?;
+
+    let messages = db.list_messages(&conversation_id).map_err(|e| e.to_string())?;
+
+    match format.as_str() {
+        "markdown" => {
+            let mut md = format!("# {}\n\n", conv.title);
+            md.push_str(&format!("*Exported: {}*\n\n---\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")));
+            for msg in &messages {
+                let label = match msg.role.as_str() {
+                    "user" => "**You**",
+                    "assistant" => "**Claude**",
+                    _ => "**System**",
+                };
+                md.push_str(&format!("{}\n\n{}\n\n---\n\n", label, msg.content));
+            }
+            Ok(md)
+        }
+        "json" => {
+            let export = ExportedConversation {
+                title: conv.title,
+                created_at: conv.created_at,
+                messages: messages.into_iter().map(|m| ExportedMessage {
+                    role: m.role,
+                    content: m.content,
+                    created_at: m.created_at,
+                }).collect(),
+            };
+            serde_json::to_string_pretty(&export).map_err(|e| e.to_string())
+        }
+        _ => Err("Unsupported format. Use 'markdown' or 'json'.".into()),
     }
 }

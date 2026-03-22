@@ -6,6 +6,7 @@
 
   let conversations = $state([]);
   let searchQuery = $state("");
+  let updateInfo = $state(null);
 
   let filteredConversations = $derived(
     searchQuery.trim()
@@ -25,7 +26,19 @@
 
   onMount(() => {
     loadConversations();
+    checkUpdates();
   });
+
+  async function checkUpdates() {
+    try {
+      const info = await invoke("check_for_updates");
+      if (info.has_update) {
+        updateInfo = info;
+      }
+    } catch (e) {
+      // Silent fail — update check is non-critical
+    }
+  }
 
   $effect(() => {
     // Re-fetch when refreshKey changes
@@ -85,6 +98,11 @@
   </div>
 
   <div class="sidebar-footer">
+    {#if updateInfo}
+      <a class="update-banner" href={updateInfo.download_url} target="_blank" rel="noopener">
+        Update available: v{updateInfo.latest_version}
+      </a>
+    {/if}
     <button class="settings-btn" onclick={openSettings}>
       Settings
     </button>
@@ -216,6 +234,24 @@
   .sidebar-footer {
     padding: 12px;
     border-top: 1px solid var(--border);
+  }
+
+  .update-banner {
+    display: block;
+    padding: 8px;
+    margin-bottom: 8px;
+    background: rgba(78, 204, 163, 0.15);
+    color: var(--success);
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+
+  .update-banner:hover {
+    background: rgba(78, 204, 163, 0.25);
   }
 
   .settings-btn {

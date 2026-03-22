@@ -5,7 +5,7 @@
   import "katex/dist/katex.min.css";
   import { tick } from "svelte";
 
-  let { role, content, isStreaming, onEdit, onRegenerate, messageId } = $props();
+  let { role, content, isStreaming, onEdit, onRegenerate, messageId, onPreviewArtifact } = $props();
   let messageEl;
   let isEditing = $state(false);
   let editText = $state("");
@@ -79,25 +79,55 @@
     }
   }
 
-  // Add copy buttons to code blocks after render
+  const PREVIEWABLE_LANGS = ["html", "svg"];
+
+  function detectLanguage(block) {
+    const code = block.querySelector("code");
+    if (!code) return null;
+    for (const cls of code.classList) {
+      const match = cls.match(/^(?:language|hljs)-(\w+)$/);
+      if (match) return match[1].toLowerCase();
+    }
+    // Fallback: detect by content
+    const text = code.textContent.trim();
+    if (text.startsWith("<svg")) return "svg";
+    if (text.includes("<!DOCTYPE") || text.includes("<html")) return "html";
+    if (text.startsWith("<") && text.endsWith(">") && text.includes("<div")) return "html";
+    return null;
+  }
+
+  // Add copy buttons (and preview buttons for HTML/SVG) to code blocks after render
   async function attachCopyButtons() {
     await tick();
     if (!messageEl) return;
     const blocks = messageEl.querySelectorAll("pre");
     for (const block of blocks) {
       if (block.querySelector(".copy-btn")) continue;
+      const code = block.querySelector("code");
+      const codeText = code ? code.textContent : block.textContent;
+
       const btn = document.createElement("button");
       btn.className = "copy-btn";
       btn.textContent = "Copy";
       btn.addEventListener("click", async () => {
-        const code = block.querySelector("code");
-        const text = code ? code.textContent : block.textContent;
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(codeText);
         btn.textContent = "Copied!";
         setTimeout(() => (btn.textContent = "Copy"), 1500);
       });
       block.style.position = "relative";
       block.appendChild(btn);
+
+      // Add preview button for previewable languages
+      const lang = detectLanguage(block);
+      if (lang && PREVIEWABLE_LANGS.includes(lang) && onPreviewArtifact) {
+        const previewBtn = document.createElement("button");
+        previewBtn.className = "preview-btn";
+        previewBtn.textContent = "Preview";
+        previewBtn.addEventListener("click", () => {
+          onPreviewArtifact({ code: codeText, language: lang });
+        });
+        block.appendChild(previewBtn);
+      }
     }
   }
 
@@ -345,6 +375,26 @@
   .message-content :global(.copy-btn:hover) {
     background: rgba(255, 255, 255, 0.2);
     color: var(--text-primary);
+  }
+
+  .message-content :global(.preview-btn) {
+    position: absolute;
+    top: 6px;
+    right: 60px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    background: rgba(233, 69, 96, 0.2);
+    color: var(--accent);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .message-content :global(.preview-btn:hover) {
+    background: rgba(233, 69, 96, 0.4);
+    color: white;
   }
 
   .message-content :global(p) {

@@ -1,5 +1,6 @@
 mod api;
 mod db;
+mod mcp;
 
 use db::Database;
 use std::sync::Mutex;
@@ -71,6 +72,7 @@ pub fn run() {
             api::send_message,
             api::stop_generation,
             api::generate_title,
+            api::check_for_updates,
             db::get_conversations,
             db::get_messages,
             db::create_conversation,
@@ -85,6 +87,15 @@ pub fn run() {
             db::set_theme,
             db::get_system_prompt,
             db::set_system_prompt,
+            db::get_mcp_servers,
+            db::set_mcp_servers,
+            db::export_conversation,
+            db::get_projects,
+            db::create_project,
+            db::update_project,
+            db::delete_project,
+            db::set_conversation_project,
+            db::get_conversation_project,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
