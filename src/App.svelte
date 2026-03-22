@@ -13,6 +13,15 @@
     try {
       const theme = await invoke("get_theme");
       document.documentElement.setAttribute("data-theme", theme);
+
+      // Load and apply custom CSS
+      const customCss = await invoke("get_custom_css");
+      if (customCss) {
+        const styleEl = document.createElement("style");
+        styleEl.id = "custom-css";
+        styleEl.textContent = customCss;
+        document.head.appendChild(styleEl);
+      }
     } catch (e) {
       console.error("Failed to load theme:", e);
     }

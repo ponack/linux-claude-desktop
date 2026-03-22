@@ -17,6 +17,10 @@
   let projects = $state([]);
   let currentProjectId = $state(null);
   let messagesContainer;
+  let prompts = $state([]);
+  let showPromptPicker = $state(false);
+  let customCommands = $state([]);
+  let showCommandPicker = $state(false);
 
   async function loadMessages() {
     if (!conversationId) {
@@ -49,7 +53,42 @@
 
   onMount(() => {
     loadProjects();
+    loadPrompts();
+    loadCustomCommands();
   });
+
+  async function loadPrompts() {
+    try { prompts = await invoke("get_prompts"); }
+    catch (e) { console.error("Failed to load prompts:", e); }
+  }
+
+  async function loadCustomCommands() {
+    try { customCommands = await invoke("get_custom_commands"); }
+    catch (e) { customCommands = []; }
+  }
+
+  function insertPrompt(prompt) {
+    inputText = prompt.content;
+    showPromptPicker = false;
+  }
+
+  let filteredCommands = $derived(
+    inputText.startsWith("/")
+      ? customCommands.filter(c => c.name.toLowerCase().startsWith(inputText.slice(1).toLowerCase()))
+      : []
+  );
+
+  async function executeCustomCommand(cmd) {
+    showCommandPicker = false;
+    inputText = "";
+    try {
+      const output = await invoke("run_custom_command", { command: cmd.command });
+      inputText = `[Output of /${cmd.name}]:\n\`\`\`\n${output.trim()}\n\`\`\`\n\nPlease analyze the above output.`;
+      await sendMessage();
+    } catch (e) {
+      console.error("Command failed:", e);
+    }
+  }
 
   async function handleProjectChange(e) {
     if (!conversationId) return;
@@ -279,9 +318,22 @@
   function handleKeydown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      // If command picker is showing and there's a match, execute it
+      if (showCommandPicker && filteredCommands.length > 0) {
+        executeCustomCommand(filteredCommands[0]);
+        return;
+      }
       sendMessage();
     }
+    if (e.key === "Escape") {
+      showCommandPicker = false;
+      showPromptPicker = false;
+    }
   }
+
+  $effect(() => {
+    showCommandPicker = inputText.startsWith("/") && inputText.length > 0 && filteredCommands.length > 0;
+  });
 </script>
 
 <div class="chat-container">
@@ -345,16 +397,49 @@
         {/each}
       </div>
     {/if}
+
+    {#if showCommandPicker}
+      <div class="command-picker">
+        {#each filteredCommands as cmd}
+          <button class="command-item" onclick={() => executeCustomCommand(cmd)}>
+            <span class="cmd-name">/{cmd.name}</span>
+            {#if cmd.description}<span class="cmd-desc">{cmd.description}</span>{/if}
+          </button>
+        {/each}
+      </div>
+    {/if}
+
+    {#if showPromptPicker}
+      <div class="command-picker">
+        {#each prompts as prompt (prompt.id)}
+          <button class="command-item" onclick={() => insertPrompt(prompt)}>
+            <span class="cmd-name">{prompt.name}</span>
+            <span class="cmd-desc">{prompt.content.length > 60 ? prompt.content.slice(0, 60) + '...' : prompt.content}</span>
+          </button>
+        {/each}
+        {#if prompts.length === 0}
+          <div class="command-item" style="opacity: 0.5; cursor: default;">No prompts saved. Add them in Settings.</div>
+        {/if}
+      </div>
+    {/if}
+
     <div class="input-wrapper">
       <button class="attach-btn" onclick={addAttachment} disabled={isStreaming} title="Attach image">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
         </svg>
       </button>
+      {#if prompts.length > 0}
+        <button class="attach-btn" onclick={() => (showPromptPicker = !showPromptPicker)} disabled={isStreaming} title="Prompt library">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+          </svg>
+        </button>
+      {/if}
       <textarea
         bind:value={inputText}
         onkeydown={handleKeydown}
-        placeholder="Message Claude..."
+        placeholder="Message Claude... (/ for commands)"
         rows="1"
         disabled={isStreaming}
       ></textarea>
@@ -580,5 +665,44 @@
 
   .stop-btn:hover {
     opacity: 0.85;
+  }
+
+  .command-picker {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .command-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    padding: 8px 12px;
+    text-align: left;
+    transition: background 0.1s;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .command-item:last-child {
+    border-bottom: none;
+  }
+
+  .command-item:hover {
+    background: var(--bg-secondary);
+  }
+
+  .cmd-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  .cmd-desc {
+    font-size: 11px;
+    color: var(--text-muted);
   }
 </style>

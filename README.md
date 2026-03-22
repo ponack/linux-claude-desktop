@@ -31,7 +31,8 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 - Streaming chat responses in real-time
 - Conversation management (create, rename, delete)
 - Persistent conversation history (SQLite)
-- Model selection (Opus 4.6, Sonnet 4.6, Haiku 4.5)
+- Multi-provider: Anthropic (Claude), OpenAI, Ollama (local models)
+- Model selection per provider
 - Markdown rendering with syntax-highlighted code blocks
 - Copy button on code blocks
 - AI-generated conversation titles
@@ -45,6 +46,14 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 - Keyboard shortcuts (Ctrl+N, Ctrl+K, Ctrl+,, Ctrl+L)
 - Stop generation mid-stream
 - Local API key storage
+- Custom CSS themes with presets (Nord, Solarized, Monokai, Dracula)
+- Prompt library for reusable templates
+- Custom slash commands (run shell scripts from chat)
+- Artifacts (sandboxed HTML/SVG preview)
+- MCP (Model Context Protocol) tool use
+- Project folders with persistent context
+- Export conversations (Markdown/JSON)
+- Auto-update notifications
 
 ## Prerequisites
 
@@ -73,9 +82,10 @@ npm run tauri dev
 
 On first launch:
 1. Click **Settings** in the sidebar
-2. Enter your [Anthropic API key](https://console.anthropic.com/)
-3. Choose your preferred model
-4. Save, and start chatting
+2. Choose your **Provider** (Anthropic, OpenAI, or Ollama)
+3. Enter your API key (or set Ollama URL for local models)
+4. Choose your preferred model
+5. Save, and start chatting
 
 ## Install (Pre-built)
 
@@ -103,12 +113,15 @@ ubuntu-claude-desktop/
 │   │   ├── Sidebar.svelte        # Conversation list
 │   │   ├── Chat.svelte           # Message list + input + streaming
 │   │   ├── MessageBubble.svelte  # Markdown rendering per message
-│   │   └── Settings.svelte       # API key + model configuration
+│   │   ├── ArtifactPreview.svelte # Sandboxed HTML/SVG preview
+│   │   └── Settings.svelte       # Provider, model, themes, plugins config
 │   └── styles/global.css         # Light/dark theme CSS variables
 ├── src-tauri/                    # Rust backend (Tauri v2)
 │   └── src/
 │       ├── lib.rs                # App state + command registration
-│       ├── api.rs                # Anthropic API streaming (SSE)
+│       ├── api.rs                # Multi-provider API streaming (SSE)
+│       ├── providers.rs          # Provider types + Ollama model discovery
+│       ├── mcp.rs                # Model Context Protocol client
 │       └── db.rs                 # SQLite: conversations, messages, settings
 └── assets/                       # Logo and branding
 ```
@@ -137,12 +150,12 @@ ubuntu-claude-desktop/
 - [x] Export conversations (Markdown/JSON)
 - [x] Auto-update mechanism
 
-### Phase 4 — Beyond Official
-- [ ] Local model support (Ollama)
-- [ ] Multi-provider support (OpenAI, etc.)
-- [ ] Plugin system
-- [ ] Custom CSS themes
-- [ ] Prompt library/templates
+### Phase 4 — Beyond Official ✅
+- [x] Local model support (Ollama)
+- [x] Multi-provider support (OpenAI, any OpenAI-compatible API)
+- [x] Custom commands / plugin system (slash commands run shell scripts)
+- [x] Custom CSS themes with presets (Nord, Solarized, Monokai, Dracula)
+- [x] Prompt library/templates
 
 ### Phase 5 — Desktop Integration
 - [ ] Global hotkey to summon app (Super+Shift+C)
@@ -172,7 +185,7 @@ ubuntu-claude-desktop/
 | Frontend | [Svelte 5](https://svelte.dev/) |
 | Backend | Rust |
 | Database | SQLite (via rusqlite) |
-| API | [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) |
+| API | [Anthropic](https://docs.anthropic.com/en/api/messages), [OpenAI](https://platform.openai.com/docs/api-reference), [Ollama](https://ollama.com/) |
 | Build | Vite |
 
 ## Contributing

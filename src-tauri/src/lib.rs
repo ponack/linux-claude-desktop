@@ -1,6 +1,7 @@
 mod api;
 mod db;
 mod mcp;
+mod providers;
 
 use db::Database;
 use std::sync::Mutex;
@@ -73,6 +74,8 @@ pub fn run() {
             api::stop_generation,
             api::generate_title,
             api::check_for_updates,
+            api::run_custom_command,
+            providers::fetch_ollama_models,
             db::get_conversations,
             db::get_messages,
             db::create_conversation,
@@ -96,6 +99,22 @@ pub fn run() {
             db::delete_project,
             db::set_conversation_project,
             db::get_conversation_project,
+            db::get_provider,
+            db::set_provider,
+            db::get_openai_api_key,
+            db::set_openai_api_key,
+            db::get_openai_base_url,
+            db::set_openai_base_url,
+            db::get_ollama_base_url,
+            db::set_ollama_base_url,
+            db::get_custom_css,
+            db::set_custom_css,
+            db::get_prompts,
+            db::create_prompt,
+            db::update_prompt,
+            db::delete_prompt,
+            db::get_custom_commands,
+            db::set_custom_commands,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
