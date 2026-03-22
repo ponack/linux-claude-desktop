@@ -45,6 +45,9 @@
   let newCmdCommand = $state("");
   let newCmdDescription = $state("");
 
+  // Update settings
+  let updateInterval = $state("startup");
+
   const anthropicModels = [
     { id: "claude-opus-4-6", name: "Claude Opus 4.6 (Most capable)" },
     { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (Balanced)" },
@@ -82,6 +85,7 @@
       await loadMcpServers();
       await loadPrompts();
       await loadCustomCommands();
+      updateInterval = await invoke("get_update_interval");
 
       if (provider === "ollama") {
         fetchOllamaModels();
@@ -265,6 +269,7 @@
       await invoke("set_system_prompt", { prompt: systemPrompt });
       await invoke("set_theme", { theme });
       await invoke("set_custom_css", { css: customCss });
+      await invoke("set_update_interval", { interval: updateInterval });
       document.documentElement.setAttribute("data-theme", theme);
 
       let styleEl = document.getElementById("custom-css");
@@ -427,6 +432,18 @@
         <option value="dark">Dark</option>
         <option value="light">Light</option>
       </select>
+    </div>
+
+    <div class="setting-group">
+      <label for="update-interval">Check for Updates</label>
+      <select id="update-interval" bind:value={updateInterval}>
+        <option value="never">Never</option>
+        <option value="startup">On startup only</option>
+        <option value="1800000">Every 30 minutes</option>
+        <option value="3600000">Every hour</option>
+        <option value="86400000">Once a day</option>
+      </select>
+      <p class="hint">How often to check GitHub for new releases.</p>
     </div>
 
     <div class="setting-group">

@@ -635,3 +635,35 @@ pub fn set_custom_commands(state: tauri::State<AppState>, commands: Vec<CustomCo
     let json = serde_json::to_string(&commands).map_err(|e| e.to_string())?;
     db.set_setting("custom_commands", &json).map_err(|e| e.to_string())
 }
+
+// --- Update Settings ---
+
+#[tauri::command]
+pub fn get_update_interval(state: tauri::State<AppState>) -> Result<String, String> {
+    state.db.lock().unwrap()
+        .get_setting("update_interval")
+        .map_err(|e| e.to_string())
+        .map(|v| v.unwrap_or_else(|| "startup".to_string()))
+}
+
+#[tauri::command]
+pub fn set_update_interval(state: tauri::State<AppState>, interval: String) -> Result<(), String> {
+    state.db.lock().unwrap().set_setting("update_interval", &interval).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_skipped_version(state: tauri::State<AppState>) -> Result<String, String> {
+    state.db.lock().unwrap()
+        .get_setting("skipped_version")
+        .map_err(|e| e.to_string())
+        .map(|v| v.unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn set_skipped_version(state: tauri::State<AppState>, version: String) -> Result<(), String> {
+    if version.is_empty() {
+        state.db.lock().unwrap().remove_setting("skipped_version").map_err(|e| e.to_string())
+    } else {
+        state.db.lock().unwrap().set_setting("skipped_version", &version).map_err(|e| e.to_string())
+    }
+}

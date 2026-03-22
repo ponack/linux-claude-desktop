@@ -74,6 +74,8 @@ pub fn run() {
             api::stop_generation,
             api::generate_title,
             api::check_for_updates,
+            api::download_update,
+            api::install_update,
             api::run_custom_command,
             providers::fetch_ollama_models,
             db::get_conversations,
@@ -115,6 +117,10 @@ pub fn run() {
             db::delete_prompt,
             db::get_custom_commands,
             db::set_custom_commands,
+            db::get_update_interval,
+            db::set_update_interval,
+            db::get_skipped_version,
+            db::set_skipped_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

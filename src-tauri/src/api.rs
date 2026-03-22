@@ -783,6 +783,7 @@ pub struct UpdateInfo {
     pub latest_version: String,
     pub download_url: String,
     pub release_notes: String,
+    pub deb_asset_url: String,
 }
 
 #[tauri::command]
@@ -817,6 +818,18 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
         .unwrap_or("")
         .to_string();
 
+    // Find the .deb asset URL
+    let deb_asset_url = json["assets"]
+        .as_array()
+        .and_then(|assets| {
+            assets.iter().find(|a| {
+                a["name"].as_str().map(|n| n.ends_with(".deb")).unwrap_or(false)
+            })
+        })
+        .and_then(|a| a["browser_download_url"].as_str())
+        .unwrap_or("")
+        .to_string();
+
     let has_update = !latest_tag.is_empty() && version_is_newer(&latest_tag, CURRENT_VERSION);
 
     Ok(UpdateInfo {
@@ -825,5 +838,74 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
         latest_version: if latest_tag.is_empty() { CURRENT_VERSION.to_string() } else { latest_tag },
         download_url,
         release_notes,
+        deb_asset_url,
     })
+}
+
+/// Download a .deb update to a temp file and return the path
+#[tauri::command]
+pub async fn download_update(app: tauri::AppHandle, url: String) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(&url)
+        .header("User-Agent", "ubuntu-claude-desktop")
+        .send()
+        .await
+        .map_err(|e| format!("Download failed: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Download failed: HTTP {}", resp.status()));
+    }
+
+    let total_size = resp.content_length().unwrap_or(0);
+    let mut downloaded: u64 = 0;
+
+    let temp_dir = std::env::temp_dir();
+    let filename = url.split('/').last().unwrap_or("update.deb");
+    let dest_path = temp_dir.join(filename);
+
+    let mut file = std::fs::File::create(&dest_path)
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+
+    let mut stream = resp.bytes_stream();
+    use std::io::Write;
+
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.map_err(|e| format!("Download stream error: {}", e))?;
+        file.write_all(&bytes).map_err(|e| format!("Write error: {}", e))?;
+        downloaded += bytes.len() as u64;
+
+        if total_size > 0 {
+            let progress = (downloaded as f64 / total_size as f64 * 100.0) as u32;
+            let _ = app.emit("update-progress", progress);
+        }
+    }
+
+    Ok(dest_path.to_string_lossy().to_string())
+}
+
+/// Install a .deb package using pkexec (polkit elevation)
+#[tauri::command]
+pub async fn install_update(deb_path: String) -> Result<(), String> {
+    // Verify file exists
+    if !std::path::Path::new(&deb_path).exists() {
+        return Err("Update file not found".to_string());
+    }
+
+    let output = std::process::Command::new("pkexec")
+        .arg("dpkg")
+        .arg("-i")
+        .arg(&deb_path)
+        .output()
+        .map_err(|e| format!("Failed to launch installer: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Installation failed: {}", stderr));
+    }
+
+    // Clean up temp file
+    let _ = std::fs::remove_file(&deb_path);
+
+    Ok(())
 }

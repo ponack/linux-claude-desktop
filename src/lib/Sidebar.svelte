@@ -1,12 +1,21 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
 
   let { activeConversationId, onSelect, onNewChat, openSettings, refreshKey } = $props();
 
   let conversations = $state([]);
   let searchQuery = $state("");
+
+  // Update system
   let updateInfo = $state(null);
+  let showUpdateDialog = $state(false);
+  let updateState = $state("idle"); // idle | downloading | installing | done | error
+  let downloadProgress = $state(0);
+  let updateError = $state("");
+  let downloadedPath = $state("");
+  let checkIntervalId = null;
 
   let filteredConversations = $derived(
     searchQuery.trim()
@@ -26,18 +35,91 @@
 
   onMount(() => {
     loadConversations();
-    checkUpdates();
+    setupUpdateChecking();
+
+    const unlisten = listen("update-progress", (event) => {
+      downloadProgress = event.payload;
+    });
+
+    return () => {
+      if (checkIntervalId) clearInterval(checkIntervalId);
+      unlisten.then((fn) => fn());
+    };
   });
+
+  async function setupUpdateChecking() {
+    const interval = await invoke("get_update_interval").catch(() => "startup");
+
+    if (interval === "never") return;
+
+    // Always check on startup (unless "never")
+    await checkUpdates();
+
+    // Set up recurring checks if interval is numeric
+    const ms = parseInt(interval);
+    if (!isNaN(ms) && ms > 0) {
+      checkIntervalId = setInterval(checkUpdates, ms);
+    }
+  }
 
   async function checkUpdates() {
     try {
       const info = await invoke("check_for_updates");
       if (info.has_update) {
+        // Check if user skipped this version
+        const skipped = await invoke("get_skipped_version").catch(() => "");
+        if (skipped === info.latest_version) return;
         updateInfo = info;
       }
     } catch (e) {
       // Silent fail — update check is non-critical
     }
+  }
+
+  function openUpdateDialog() {
+    showUpdateDialog = true;
+    updateState = "idle";
+    updateError = "";
+    downloadProgress = 0;
+  }
+
+  function closeUpdateDialog() {
+    showUpdateDialog = false;
+  }
+
+  async function skipVersion() {
+    if (updateInfo) {
+      await invoke("set_skipped_version", { version: updateInfo.latest_version }).catch(() => {});
+    }
+    updateInfo = null;
+    showUpdateDialog = false;
+  }
+
+  async function downloadAndInstall() {
+    if (!updateInfo?.deb_asset_url) {
+      updateError = "No .deb package found for this release. Please download manually.";
+      updateState = "error";
+      return;
+    }
+
+    updateState = "downloading";
+    downloadProgress = 0;
+    updateError = "";
+
+    try {
+      downloadedPath = await invoke("download_update", { url: updateInfo.deb_asset_url });
+      updateState = "installing";
+
+      await invoke("install_update", { debPath: downloadedPath });
+      updateState = "done";
+    } catch (e) {
+      updateError = String(e);
+      updateState = "error";
+    }
+  }
+
+  function restartApp() {
+    window.location.reload();
   }
 
   $effect(() => {
@@ -102,15 +184,91 @@
 
   <div class="sidebar-footer">
     {#if updateInfo}
-      <a class="update-banner" href={updateInfo.download_url} target="_blank" rel="noopener" aria-label="Update available: version {updateInfo.latest_version}">
+      <button class="update-banner" onclick={openUpdateDialog} aria-label="Update available: version {updateInfo.latest_version}">
         Update available: v{updateInfo.latest_version}
-      </a>
+      </button>
     {/if}
     <button class="settings-btn" onclick={openSettings} aria-label="Open settings">
       Settings
     </button>
   </div>
 </aside>
+
+{#if showUpdateDialog}
+  <div class="update-overlay" onclick={closeUpdateDialog} role="dialog" aria-label="Update dialog">
+    <div class="update-dialog" onclick={(e) => e.stopPropagation()}>
+      <div class="update-dialog-header">
+        <h3>Update Available</h3>
+        <button class="update-close" onclick={closeUpdateDialog} aria-label="Close">&times;</button>
+      </div>
+
+      <div class="update-dialog-body">
+        <div class="version-info">
+          <span class="version-badge old">v{updateInfo.current_version}</span>
+          <span class="version-arrow">&rarr;</span>
+          <span class="version-badge new">v{updateInfo.latest_version}</span>
+        </div>
+
+        {#if updateInfo.release_notes}
+          <div class="release-notes">
+            <h4>Release Notes</h4>
+            <div class="release-notes-content">{updateInfo.release_notes}</div>
+          </div>
+        {/if}
+
+        {#if updateState === "downloading"}
+          <div class="progress-section">
+            <div class="progress-label">Downloading... {downloadProgress}%</div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: {downloadProgress}%"></div>
+            </div>
+          </div>
+        {:else if updateState === "installing"}
+          <div class="progress-section">
+            <div class="progress-label">Installing... Please enter your password if prompted.</div>
+          </div>
+        {:else if updateState === "done"}
+          <div class="update-success">
+            Update installed successfully. Restart to apply.
+          </div>
+        {:else if updateState === "error"}
+          <div class="update-error">{updateError}</div>
+        {/if}
+      </div>
+
+      <div class="update-dialog-footer">
+        {#if updateState === "idle"}
+          <button class="update-btn primary" onclick={downloadAndInstall}>
+            Download & Install
+          </button>
+          <a class="update-btn secondary" href={updateInfo.download_url} target="_blank" rel="noopener">
+            View on GitHub
+          </a>
+          <button class="update-btn ghost" onclick={skipVersion}>
+            Skip this version
+          </button>
+        {:else if updateState === "done"}
+          <button class="update-btn primary" onclick={restartApp}>
+            Restart Now
+          </button>
+          <button class="update-btn secondary" onclick={closeUpdateDialog}>
+            Later
+          </button>
+        {:else if updateState === "error"}
+          <button class="update-btn primary" onclick={downloadAndInstall}>
+            Retry
+          </button>
+          <a class="update-btn secondary" href={updateInfo.download_url} target="_blank" rel="noopener">
+            Download Manually
+          </a>
+          <button class="update-btn ghost" onclick={closeUpdateDialog}>
+            Close
+          </button>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .sidebar {
@@ -178,6 +336,7 @@
     font-size: 13px;
     outline: none;
     transition: border-color 0.15s;
+    box-sizing: border-box;
   }
 
   .search-box input:focus {
@@ -241,6 +400,7 @@
 
   .update-banner {
     display: block;
+    width: 100%;
     padding: 8px;
     margin-bottom: 8px;
     background: rgba(78, 204, 163, 0.15);
@@ -249,8 +409,8 @@
     font-size: 12px;
     font-weight: 500;
     text-align: center;
-    text-decoration: none;
     transition: background 0.15s;
+    cursor: pointer;
   }
 
   .update-banner:hover {
@@ -268,5 +428,207 @@
 
   .settings-btn:hover {
     background: var(--bg-tertiary);
+  }
+
+  /* Update Dialog */
+  .update-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .update-dialog {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 480px;
+    max-width: 90vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+
+  .update-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .update-dialog-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .update-close {
+    font-size: 20px;
+    color: var(--text-muted);
+    padding: 0 4px;
+    line-height: 1;
+  }
+
+  .update-close:hover {
+    color: var(--text-primary);
+  }
+
+  .update-dialog-body {
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .version-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .version-badge {
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+  }
+
+  .version-badge.old {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+  }
+
+  .version-badge.new {
+    background: rgba(78, 204, 163, 0.2);
+    color: var(--success);
+  }
+
+  .version-arrow {
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+
+  .release-notes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .release-notes h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .release-notes-content {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    padding: 12px;
+    border-radius: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+
+  .progress-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .progress-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .progress-bar {
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.2s;
+  }
+
+  .update-success {
+    padding: 12px;
+    background: rgba(78, 204, 163, 0.15);
+    color: var(--success);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  .update-error {
+    padding: 12px;
+    background: rgba(233, 69, 96, 0.1);
+    color: var(--danger);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  .update-dialog-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .update-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.15s, opacity 0.15s;
+    text-decoration: none;
+    text-align: center;
+  }
+
+  .update-btn.primary {
+    background: var(--accent);
+    color: white;
+  }
+
+  .update-btn.primary:hover {
+    background: var(--accent-hover);
+  }
+
+  .update-btn.secondary {
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .update-btn.secondary:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .update-btn.ghost {
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  .update-btn.ghost:hover {
+    color: var(--text-secondary);
   }
 </style>
