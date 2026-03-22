@@ -16,7 +16,7 @@
     "@tauri-apps/plugin-notification": "^2.3.3",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.40",
-    "marked": "^15.0.0"
+    "marked": "^17.0.5"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
