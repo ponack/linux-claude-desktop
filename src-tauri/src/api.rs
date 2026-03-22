@@ -319,6 +319,11 @@ async fn stream_anthropic(
 
                 while let Some(chunk) = stream.next().await {
                     if STOP_FLAG.load(Ordering::SeqCst) {
+                        if !full_content.is_empty() {
+                            let db_state = app.state::<AppState>();
+                            let db = db_state.db.lock().unwrap();
+                            let _ = db.update_message_content(msg_id, &full_content);
+                        }
                         let _ = app.emit("stream-event", StreamEvent {
                             event: "done".into(),
                             content: String::new(),
@@ -406,6 +411,12 @@ async fn stream_anthropic(
                             }
                         }
                         Err(e) => {
+                            // Save partial content before reporting error
+                            if !full_content.is_empty() {
+                                let db_state = app.state::<AppState>();
+                                let db = db_state.db.lock().unwrap();
+                                let _ = db.update_message_content(msg_id, &full_content);
+                            }
                             let _ = app.emit("stream-event", StreamEvent {
                                 event: "error".into(),
                                 content: format!("Stream error: {}", e),
@@ -580,6 +591,11 @@ async fn stream_openai_compatible(
 
             while let Some(chunk) = stream.next().await {
                 if STOP_FLAG.load(Ordering::SeqCst) {
+                    if !full_content.is_empty() {
+                        let db_state = app.state::<AppState>();
+                        let db = db_state.db.lock().unwrap();
+                        let _ = db.update_message_content(msg_id, &full_content);
+                    }
                     let _ = app.emit("stream-event", StreamEvent {
                         event: "done".into(),
                         content: String::new(),
@@ -620,6 +636,12 @@ async fn stream_openai_compatible(
                         }
                     }
                     Err(e) => {
+                        // Save partial content before reporting error
+                        if !full_content.is_empty() {
+                            let db_state = app.state::<AppState>();
+                            let db = db_state.db.lock().unwrap();
+                            let _ = db.update_message_content(msg_id, &full_content);
+                        }
                         let _ = app.emit("stream-event", StreamEvent {
                             event: "error".into(),
                             content: format!("Stream error: {}", e),
@@ -669,8 +691,14 @@ pub async fn generate_title(
 
     let title = match provider.provider_type {
         ProviderType::Anthropic => {
+            // Use Haiku for title generation — fast and cheap
+            let title_model = if provider.model.contains("haiku") {
+                provider.model.clone()
+            } else {
+                "claude-haiku-4-5-20251001".to_string()
+            };
             let body = serde_json::json!({
-                "model": "claude-haiku-4-5-20251001",
+                "model": title_model,
                 "max_tokens": 30,
                 "messages": [{"role": "user", "content": prompt}]
             });

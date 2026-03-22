@@ -17,10 +17,13 @@
   let projects = $state([]);
   let currentProjectId = $state(null);
   let messagesContainer;
+  let chatInput;
   let prompts = $state([]);
   let showPromptPicker = $state(false);
   let customCommands = $state([]);
   let showCommandPicker = $state(false);
+  let activeModel = $state("");
+  let activeProvider = $state("");
 
   async function loadMessages() {
     if (!conversationId) {
@@ -55,7 +58,16 @@
     loadProjects();
     loadPrompts();
     loadCustomCommands();
+    loadActiveModel();
+    if (chatInput) chatInput.focus();
   });
+
+  async function loadActiveModel() {
+    try {
+      activeModel = await invoke("get_model");
+      activeProvider = await invoke("get_provider");
+    } catch (e) { /* non-critical */ }
+  }
 
   async function loadPrompts() {
     try { prompts = await invoke("get_prompts"); }
@@ -86,7 +98,17 @@
       inputText = `[Output of /${cmd.name}]:\n\`\`\`\n${output.trim()}\n\`\`\`\n\nPlease analyze the above output.`;
       await sendMessage();
     } catch (e) {
-      console.error("Command failed:", e);
+      messages = [
+        ...messages,
+        {
+          id: "error-" + Date.now(),
+          role: "error",
+          content: `Command /${cmd.name} failed: ${String(e)}`,
+          conversation_id: conversationId,
+          created_at: new Date().toISOString(),
+        },
+      ];
+      scrollToBottom();
     }
   }
 
@@ -230,10 +252,17 @@
           content: String(e),
           conversation_id: convId,
           created_at: new Date().toISOString(),
+          retryContent: text,
         },
       ];
       scrollToBottom();
     }
+  }
+
+  async function retryMessage(errorMsg) {
+    messages = messages.filter((m) => m.id !== errorMsg.id);
+    inputText = errorMsg.retryContent || "";
+    await sendMessage();
   }
 
   async function handleEdit(messageId, newContent) {
@@ -340,8 +369,11 @@
   <div class="chat-main" class:has-artifact={activeArtifact}>
     {#if conversationId && messages.length > 0}
       <div class="chat-toolbar">
+        {#if activeModel}
+          <span class="model-indicator" title="{activeProvider} / {activeModel}">{activeModel}</span>
+        {/if}
         {#if projects.length > 0}
-          <select class="project-select" value={currentProjectId || ""} onchange={handleProjectChange}>
+          <select class="project-select" aria-label="Assign project" value={currentProjectId || ""} onchange={handleProjectChange}>
             <option value="">No project</option>
             {#each projects as project (project.id)}
               <option value={project.id}>{project.name}</option>
@@ -349,13 +381,13 @@
           </select>
         {/if}
         <div class="toolbar-actions">
-          <button class="toolbar-btn" onclick={() => exportConversation("markdown")} title="Export as Markdown">
+          <button class="toolbar-btn" onclick={() => exportConversation("markdown")} title="Export as Markdown" aria-label="Export as Markdown">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             .md
           </button>
-          <button class="toolbar-btn" onclick={() => exportConversation("json")} title="Export as JSON">
+          <button class="toolbar-btn" onclick={() => exportConversation("json")} title="Export as JSON" aria-label="Export as JSON">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
@@ -364,10 +396,10 @@
         </div>
       </div>
     {/if}
-    <div class="messages" bind:this={messagesContainer}>
+    <div class="messages" bind:this={messagesContainer} role="log" aria-live="polite" aria-label="Chat messages">
       {#if messages.length === 0 && !conversationId}
         <div class="empty-state">
-          <img src="/assets/logo.svg" alt="UCD" class="empty-logo" />
+          <img src="/assets/logo.svg" alt="Ubuntu Claude Desktop" class="empty-logo" />
           <h2>Ubuntu Claude Desktop</h2>
           <p>Start a conversation by typing a message below.</p>
         </div>
@@ -382,6 +414,7 @@
           onEdit={handleEdit}
           onRegenerate={handleRegenerate}
           onPreviewArtifact={handlePreviewArtifact}
+          onRetry={message.retryContent ? () => retryMessage(message) : null}
         />
       {/each}
     </div>
@@ -392,7 +425,7 @@
         {#each attachments as att, i}
           <div class="attachment-chip">
             <span class="att-name">{att.name}</span>
-            <button class="att-remove" onclick={() => removeAttachment(i)}>x</button>
+            <button class="att-remove" onclick={() => removeAttachment(i)} aria-label="Remove attachment {att.name}">x</button>
           </div>
         {/each}
       </div>
@@ -424,32 +457,33 @@
     {/if}
 
     <div class="input-wrapper">
-      <button class="attach-btn" onclick={addAttachment} disabled={isStreaming} title="Attach image">
+      <button class="attach-btn" onclick={addAttachment} disabled={isStreaming} title="Attach image (PNG, JPG, GIF, WebP)" aria-label="Attach image">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
         </svg>
       </button>
-      {#if prompts.length > 0}
-        <button class="attach-btn" onclick={() => (showPromptPicker = !showPromptPicker)} disabled={isStreaming} title="Prompt library">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
-          </svg>
-        </button>
-      {/if}
+      <button class="attach-btn" onclick={() => (showPromptPicker = !showPromptPicker)} disabled={isStreaming} title="Insert a saved prompt from your library" aria-label="Prompt library">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+        </svg>
+      </button>
       <textarea
+        bind:this={chatInput}
         bind:value={inputText}
         onkeydown={handleKeydown}
         placeholder="Message Claude... (/ for commands)"
         rows="1"
         disabled={isStreaming}
+        aria-label="Chat message input"
       ></textarea>
       {#if isStreaming}
-        <button class="stop-btn" onclick={stopGeneration}>Stop</button>
+        <button class="stop-btn" onclick={stopGeneration} aria-label="Stop generating">Stop</button>
       {:else}
         <button
           class="send-btn"
           onclick={sendMessage}
           disabled={!inputText.trim() && attachments.length === 0}
+          aria-label="Send message"
         >
           Send
         </button>
@@ -485,6 +519,19 @@
     border-bottom: 1px solid var(--border);
     background: var(--bg-secondary);
     flex-shrink: 0;
+  }
+
+  .model-indicator {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-right: auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
   }
 
   .toolbar-actions {
