@@ -915,7 +915,8 @@ pub async fn install_update(deb_path: String) -> Result<(), String> {
 pub async fn restart_app(_app: tauri::AppHandle) -> Result<(), String> {
     let exe = std::env::current_exe()
         .map_err(|e| format!("Failed to get executable path: {}", e))?;
-    let exe_str = exe.to_string_lossy().to_string();
+    // After dpkg replaces the binary, /proc/self/exe gets a " (deleted)" suffix — strip it
+    let exe_str = exe.to_string_lossy().replace(" (deleted)", "");
     let pid = std::process::id();
 
     // Capture environment variables the GUI needs to connect to the display server
