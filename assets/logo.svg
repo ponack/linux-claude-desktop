@@ -1,46 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1a1a2e"/>
-      <stop offset="100%" stop-color="#16213e"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#e94560"/>
-      <stop offset="100%" stop-color="#ff6b81"/>
-    </linearGradient>
-    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#e94560"/>
-      <stop offset="50%" stop-color="#ff6b81"/>
-      <stop offset="100%" stop-color="#e94560"/>
-    </linearGradient>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="#1a1a2e"/>
 
-  <!-- Background circle -->
-  <circle cx="256" cy="256" r="248" fill="url(#bg)" stroke="url(#ring)" stroke-width="6"/>
+  <!-- Circle of friends: ring r=120, center (256,240)
+       Top:         (256, 120)
+       Bottom-right:(359.9, 300)
+       Bottom-left: (152.1, 300)
+  -->
+  <!-- Arc 1: top → bottom-right -->
+  <path d="M256,120 A120,120 0 0,1 359.9,300" fill="none" stroke="#e94560" stroke-width="20" stroke-linecap="round"/>
+  <!-- Arc 2: bottom-right → bottom-left -->
+  <path d="M359.9,300 A120,120 0 0,1 152.1,300" fill="none" stroke="#e94560" stroke-width="20" stroke-linecap="round"/>
+  <!-- Arc 3: bottom-left → top -->
+  <path d="M152.1,300 A120,120 0 0,1 256,120" fill="none" stroke="#e94560" stroke-width="20" stroke-linecap="round"/>
 
-  <!-- Ubuntu-inspired trio of circles on the outer ring -->
-  <circle cx="256" cy="72" r="28" fill="url(#accent)"/>
-  <circle cx="96" cy="356" r="28" fill="url(#accent)"/>
-  <circle cx="416" cy="356" r="28" fill="url(#accent)"/>
+  <!-- Node dots at each arc end: r=17 -->
+  <circle cx="256"   cy="120" r="17" fill="#e94560"/>
+  <circle cx="359.9" cy="300" r="17" fill="#e94560"/>
+  <circle cx="152.1" cy="300" r="17" fill="#e94560"/>
 
-  <!-- Connecting arcs (Ubuntu style) -->
-  <path d="M 272 98 A 170 170 0 0 1 398 336" stroke="#e94560" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.5"/>
-  <path d="M 114 336 A 170 170 0 0 1 240 98" stroke="#e94560" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.5"/>
-  <path d="M 398 376 A 170 170 0 0 1 114 376" stroke="#e94560" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.5"/>
+  <!-- Center ring: outer r=27, inner r=15 -->
+  <circle cx="256" cy="240" r="27" fill="#e94560"/>
+  <circle cx="256" cy="240" r="15" fill="#1a1a2e"/>
 
-  <!-- Chat bubble (center) -->
-  <rect x="156" y="168" rx="24" ry="24" width="200" height="140" fill="url(#accent)" opacity="0.9"/>
-  <!-- Chat bubble tail -->
-  <polygon points="196,308 216,308 186,348" fill="url(#accent)" opacity="0.9"/>
-
-  <!-- Three dots in chat bubble (typing/AI indicator) -->
-  <circle cx="216" cy="238" r="14" fill="#1a1a2e" opacity="0.8">
-    <animate attributeName="opacity" values="0.4;0.8;0.4" dur="1.5s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="256" cy="238" r="14" fill="#1a1a2e" opacity="0.8">
-    <animate attributeName="opacity" values="0.4;0.8;0.4" dur="1.5s" begin="0.3s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="296" cy="238" r="14" fill="#1a1a2e" opacity="0.8">
-    <animate attributeName="opacity" values="0.4;0.8;0.4" dur="1.5s" begin="0.6s" repeatCount="indefinite"/>
-  </circle>
+  <!-- Chat bubble: body -->
+  <rect x="176" y="342" width="178" height="98" rx="24" fill="#e94560"/>
+  <!-- Tail: points bottom-left, attached cleanly to bottom of rect -->
+  <polygon points="200,428 174,470 238,428" fill="#e94560"/>
+  <!-- Content lines -->
+  <rect x="200" y="366" width="130" height="11" rx="5.5" fill="#1a1a2e" opacity="0.5"/>
+  <rect x="200" y="387" width="98"  height="11" rx="5.5" fill="#1a1a2e" opacity="0.38"/>
+  <rect x="200" y="408" width="114" height="11" rx="5.5" fill="#1a1a2e" opacity="0.28"/>
 </svg>

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Ubuntu Claude Desktop" width="180" />
+  <img src="assets/logo.svg" alt="Ubuntu Claude Desktop" width="180" />
 </p>
 
 <h1 align="center">Ubuntu Claude Desktop</h1>
