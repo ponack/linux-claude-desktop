@@ -6,6 +6,10 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
-    "dialog:default"
+    "dialog:default",
+    "notification:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "deep-link:default"
   ]
 }

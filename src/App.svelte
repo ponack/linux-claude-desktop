@@ -1,6 +1,9 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
-  import { onMount } from "svelte";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
+  import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
+  import { onMount, onDestroy } from "svelte";
   import Sidebar from "./lib/Sidebar.svelte";
   import Chat from "./lib/Chat.svelte";
   import Settings from "./lib/Settings.svelte";
@@ -8,13 +11,15 @@
   let currentView = $state("chat");
   let activeConversationId = $state(null);
   let sidebarRefresh = $state(0);
+  let deepLinkText = $state("");
+
+  const SUMMON_SHORTCUT = "Super+Shift+C";
 
   onMount(async () => {
     try {
       const theme = await invoke("get_theme");
       document.documentElement.setAttribute("data-theme", theme);
 
-      // Load and apply custom CSS
       const customCss = await invoke("get_custom_css");
       if (customCss) {
         const styleEl = document.createElement("style");
@@ -25,6 +30,47 @@
     } catch (e) {
       console.error("Failed to load theme:", e);
     }
+
+    try {
+      await register(SUMMON_SHORTCUT, async () => {
+        const win = getCurrentWindow();
+        const visible = await win.isVisible();
+        if (visible) {
+          await win.hide();
+        } else {
+          await win.show();
+          await win.setFocus();
+        }
+      });
+    } catch (e) {
+      console.error("Failed to register global shortcut:", e);
+    }
+
+    try {
+      await onOpenUrl((urls) => {
+        for (const url of urls) {
+          try {
+            const parsed = new URL(url);
+            if (parsed.pathname === "ask" || parsed.pathname === "/ask") {
+              const q = parsed.searchParams.get("q")?.slice(0, 10000);
+              if (q) {
+                activeConversationId = null;
+                currentView = "chat";
+                deepLinkText = q;
+              }
+            }
+          } catch (_) {}
+        }
+        getCurrentWindow().show();
+        getCurrentWindow().setFocus();
+      });
+    } catch (e) {
+      console.error("Failed to register deep link handler:", e);
+    }
+  });
+
+  onDestroy(async () => {
+    try { await unregister(SUMMON_SHORTCUT); } catch (_) {}
   });
 
   function onSelectConversation(id) {
@@ -100,6 +146,7 @@
       <Chat
         conversationId={activeConversationId}
         {onConversationCreated}
+        bind:deepLinkText={deepLinkText}
       />
     {/if}
   </main>

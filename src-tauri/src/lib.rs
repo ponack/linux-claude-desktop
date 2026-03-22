@@ -23,6 +23,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(AppState {
             db: Mutex::new(db),
         })
@@ -79,6 +81,7 @@ pub fn run() {
             api::restart_app,
             api::get_app_info,
             api::run_custom_command,
+            api::capture_screenshot,
             providers::fetch_ollama_models,
             db::get_conversations,
             db::get_messages,

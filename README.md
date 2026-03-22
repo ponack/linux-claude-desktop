@@ -195,15 +195,15 @@ ubuntu-claude-desktop/
 - [x] Professional auto-update system (configurable intervals, download progress, pkexec install, restart)
 - [x] About section (version, OS distro, architecture, repo link)
 
-### Phase 5 — Desktop Integration
-- [ ] Global hotkey to summon app (Super+Shift+C)
-- [ ] Screenshot-to-Claude (capture region, send via vision API)
-- [ ] Drag-and-drop file attachments
-- [ ] Clipboard-aware paste (images, code detection)
-- [ ] Desktop notifications for completed responses
+### Phase 5 — Desktop Integration ✅
+- [x] Global hotkey to summon app (Super+Shift+C)
+- [x] Screenshot-to-Claude (capture region, send via vision API)
+- [x] Drag-and-drop file attachments
+- [x] Clipboard-aware paste (images)
+- [x] Desktop notifications for completed responses
+- [x] URI protocol handler (claude://ask?q=...)
 - [ ] Quick-ask floating overlay window
 - [ ] DBus interface for scripting/automation
-- [ ] URI protocol handler (claude://)
 
 ### Phase 6 — Workflows & Productivity
 - [ ] Conversation branching (fork at any message)

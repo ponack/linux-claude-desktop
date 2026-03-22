@@ -2,11 +2,12 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
   import { onMount, tick } from "svelte";
   import MessageBubble from "./MessageBubble.svelte";
   import ArtifactPreview from "./ArtifactPreview.svelte";
 
-  let { conversationId, onConversationCreated } = $props();
+  let { conversationId, onConversationCreated, deepLinkText = $bindable("") } = $props();
 
   let messages = $state([]);
   let inputText = $state("");
@@ -61,6 +62,26 @@
     loadActiveModel();
     if (chatInput) chatInput.focus();
   });
+
+  $effect(() => {
+    if (deepLinkText) {
+      inputText = deepLinkText;
+      deepLinkText = "";
+      tick().then(() => sendMessage());
+    }
+  });
+
+  async function notifyIfBackground(title, body) {
+    if (document.hasFocus()) return;
+    try {
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const permission = await requestPermission();
+        granted = permission === "granted";
+      }
+      if (granted) sendNotification({ title, body });
+    } catch (_) {}
+  }
 
   async function loadActiveModel() {
     try {
@@ -137,6 +158,7 @@
       } else if (eventType === "done") {
         isStreaming = false;
         streamingMessageId = null;
+        notifyIfBackground("Response complete", "Claude has finished responding.");
       } else if (eventType === "error") {
         isStreaming = false;
         streamingMessageId = null;
@@ -198,6 +220,90 @@
     attachments = attachments.filter((_, i) => i !== index);
   }
 
+  async function captureScreenshot() {
+    try {
+      const result = await invoke("capture_screenshot");
+      attachments = [...attachments, {
+        path: null,
+        data: result.data,
+        media_type: result.media_type,
+        name: "screenshot.png",
+      }];
+    } catch (e) {
+      console.error("Screenshot failed:", e);
+    }
+  }
+
+  let isDragging = $state(false);
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    isDragging = true;
+  }
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    isDragging = false;
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    isDragging = false;
+    const files = e.dataTransfer?.files;
+    if (!files) return;
+    processDroppedFiles(files);
+  }
+
+  function processDroppedFiles(fileList) {
+    const imageExts = ["png", "jpg", "jpeg", "gif", "webp"];
+    const mediaTypes = {
+      png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+      gif: "image/gif", webp: "image/webp",
+    };
+    for (const file of fileList) {
+      const ext = file.name.split(".").pop().toLowerCase();
+      if (!imageExts.includes(ext)) continue;
+      const reader = new FileReader();
+      reader.onload = () => {
+        attachments = [...attachments, {
+          path: null,
+          data: reader.result.split(",")[1],
+          media_type: mediaTypes[ext] || "image/png",
+          name: file.name,
+        }];
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function handlePaste(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageItems = [];
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        imageItems.push(item);
+      }
+    }
+    if (imageItems.length === 0) return;
+    e.preventDefault();
+    for (const item of imageItems) {
+      const file = item.getAsFile();
+      if (!file) continue;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const ext = file.type.split("/")[1] === "jpeg" ? "jpg" : file.type.split("/")[1];
+        attachments = [...attachments, {
+          path: null,
+          data: reader.result.split(",")[1],
+          media_type: file.type,
+          name: `pasted-image.${ext}`,
+        }];
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
   async function sendMessage() {
     const text = inputText.trim();
     if ((!text && attachments.length === 0) || isStreaming) return;
@@ -223,7 +329,7 @@
     isStreaming = true;
 
     try {
-      const apiAttachments = currentAttachments.map(({ path, media_type }) => ({ path, media_type }));
+      const apiAttachments = currentAttachments.map(({ path, media_type, data }) => ({ path: path || null, media_type, data: data || null }));
       const assistantMsgId = await invoke("send_message", {
         conversationId: convId,
         content: text,
@@ -419,7 +525,8 @@
       {/each}
     </div>
 
-    <div class="input-area">
+    <div class="input-area" class:dragging={isDragging}
+      ondragover={handleDragOver} ondragleave={handleDragLeave} ondrop={handleDrop}>
     {#if attachments.length > 0}
       <div class="attachments-preview">
         {#each attachments as att, i}
@@ -462,6 +569,11 @@
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
         </svg>
       </button>
+      <button class="attach-btn" onclick={captureScreenshot} disabled={isStreaming} title="Capture screenshot region" aria-label="Capture screenshot">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+        </svg>
+      </button>
       <button class="attach-btn" onclick={() => (showPromptPicker = !showPromptPicker)} disabled={isStreaming} title="Insert a saved prompt from your library" aria-label="Prompt library">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
@@ -471,7 +583,8 @@
         bind:this={chatInput}
         bind:value={inputText}
         onkeydown={handleKeydown}
-        placeholder="Message Claude... (/ for commands)"
+        onpaste={handlePaste}
+        placeholder="Message Claude... (/ for commands, paste or drop images)"
         rows="1"
         disabled={isStreaming}
         aria-label="Chat message input"
@@ -605,6 +718,13 @@
     padding: 16px 20px;
     border-top: 1px solid var(--border);
     background: var(--bg-secondary);
+    transition: background 0.15s;
+  }
+
+  .input-area.dragging {
+    background: var(--bg-tertiary, var(--bg-secondary));
+    outline: 2px dashed var(--accent);
+    outline-offset: -4px;
   }
 
   .attachments-preview {
