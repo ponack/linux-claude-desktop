@@ -76,6 +76,7 @@ pub fn run() {
             api::check_for_updates,
             api::download_update,
             api::install_update,
+            api::restart_app,
             api::run_custom_command,
             providers::fetch_ollama_models,
             db::get_conversations,

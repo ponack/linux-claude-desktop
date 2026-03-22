@@ -118,8 +118,13 @@
     }
   }
 
-  function restartApp() {
-    window.location.reload();
+  async function restartApp() {
+    try {
+      await invoke("restart_app");
+    } catch (e) {
+      // Fallback if restart command fails
+      window.location.reload();
+    }
   }
 
   $effect(() => {

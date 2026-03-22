@@ -909,3 +909,21 @@ pub async fn install_update(deb_path: String) -> Result<(), String> {
 
     Ok(())
 }
+
+/// Restart the application by spawning the new binary and exiting
+#[tauri::command]
+pub async fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
+    // Get the path to our own executable
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Failed to get executable path: {}", e))?;
+
+    // Spawn the new process detached
+    std::process::Command::new(&exe)
+        .spawn()
+        .map_err(|e| format!("Failed to restart: {}", e))?;
+
+    // Exit the current process
+    app.exit(0);
+
+    Ok(())
+}
