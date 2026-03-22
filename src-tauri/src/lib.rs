@@ -20,6 +20,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             api::send_message,
             api::stop_generation,
+            api::generate_title,
             db::get_conversations,
             db::get_messages,
             db::create_conversation,
@@ -29,6 +30,8 @@ pub fn run() {
             db::set_api_key,
             db::get_model,
             db::set_model,
+            db::get_system_prompt,
+            db::set_system_prompt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

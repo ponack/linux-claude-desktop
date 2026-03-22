@@ -29,7 +29,41 @@
   function closeSettings() {
     currentView = "chat";
   }
+
+  function handleGlobalKeydown(e) {
+    // Ctrl+N: New chat
+    if (e.ctrlKey && e.key === "n") {
+      e.preventDefault();
+      onNewChat();
+    }
+    // Ctrl+,: Settings
+    if (e.ctrlKey && e.key === ",") {
+      e.preventDefault();
+      if (currentView === "settings") closeSettings();
+      else openSettings();
+    }
+    // Ctrl+L: Focus chat input
+    if (e.ctrlKey && e.key === "l") {
+      e.preventDefault();
+      const textarea = document.querySelector(".input-wrapper textarea");
+      if (textarea) textarea.focus();
+    }
+    // Ctrl+K: Focus search
+    if (e.ctrlKey && e.key === "k") {
+      e.preventDefault();
+      const search = document.querySelector(".search-box input");
+      if (search) search.focus();
+    }
+    // Escape: Close settings or clear search
+    if (e.key === "Escape") {
+      if (currentView === "settings") {
+        closeSettings();
+      }
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <div class="app-layout">
   <Sidebar

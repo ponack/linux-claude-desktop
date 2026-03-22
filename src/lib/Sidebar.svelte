@@ -5,6 +5,15 @@
   let { activeConversationId, onSelect, onNewChat, openSettings, refreshKey } = $props();
 
   let conversations = $state([]);
+  let searchQuery = $state("");
+
+  let filteredConversations = $derived(
+    searchQuery.trim()
+      ? conversations.filter((c) =>
+          c.title.toLowerCase().includes(searchQuery.trim().toLowerCase())
+        )
+      : conversations
+  );
 
   async function loadConversations() {
     try {
@@ -45,8 +54,16 @@
     </button>
   </div>
 
+  <div class="search-box">
+    <input
+      type="text"
+      bind:value={searchQuery}
+      placeholder="Search conversations..."
+    />
+  </div>
+
   <div class="conversations-list">
-    {#each conversations as conv (conv.id)}
+    {#each filteredConversations as conv (conv.id)}
       <div
         class="conversation-item"
         class:active={activeConversationId === conv.id}
@@ -99,6 +116,25 @@
 
   .new-chat-btn:hover {
     background: var(--accent-hover);
+  }
+
+  .search-box {
+    padding: 8px 12px 0;
+  }
+
+  .search-box input {
+    width: 100%;
+    padding: 7px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .search-box input:focus {
+    border-color: var(--accent);
   }
 
   .conversations-list {

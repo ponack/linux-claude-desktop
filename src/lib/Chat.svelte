@@ -81,11 +81,13 @@
     let convId = conversationId;
 
     // Create conversation if needed
+    let isNewConversation = false;
     if (!convId) {
       try {
         const title = text.length > 40 ? text.substring(0, 40) + "..." : text;
         convId = await invoke("create_conversation", { title });
         onConversationCreated(convId);
+        isNewConversation = true;
       } catch (e) {
         console.error("Failed to create conversation:", e);
         return;
@@ -105,6 +107,16 @@
       // Reload messages to get the saved user message + placeholder
       await loadMessages();
       scrollToBottom();
+
+      // Generate AI title for new conversations (fire and forget)
+      if (isNewConversation) {
+        invoke("generate_title", {
+          conversationId: convId,
+          userMessage: text,
+        }).then(() => {
+          onConversationCreated(convId);
+        }).catch((e) => console.error("Title generation failed:", e));
+      }
     } catch (e) {
       isStreaming = false;
       messages = [

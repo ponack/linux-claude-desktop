@@ -48,6 +48,12 @@ pub async fn send_message(
             .unwrap_or_else(|| "claude-sonnet-4-6".to_string())
     };
 
+    let system_prompt = {
+        let db = state.db.lock().unwrap();
+        db.get_setting("system_prompt")
+            .map_err(|e| e.to_string())?
+    };
+
     // Save user message
     let user_msg_id = uuid::Uuid::new_v4().to_string();
     {
@@ -84,19 +90,26 @@ pub async fn send_message(
         model,
         messages,
         conversation_id.clone(),
+        system_prompt,
     ));
 
     // Spawn streaming task
     let msg_id = assistant_msg_id.clone();
     tauri::async_runtime::spawn(async move {
-        let (api_key, model, messages, _conversation_id) = state_inner.as_ref();
+        let (api_key, model, messages, _conversation_id, system_prompt) = state_inner.as_ref();
 
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": model,
             "max_tokens": 8192,
             "stream": true,
             "messages": messages,
         });
+
+        if let Some(sp) = system_prompt {
+            if !sp.trim().is_empty() {
+                body["system"] = serde_json::json!(sp);
+            }
+        }
 
         let client = reqwest::Client::new();
         let response = client
@@ -202,4 +215,58 @@ pub async fn send_message(
     });
 
     Ok(assistant_msg_id_clone)
+}
+
+#[tauri::command]
+pub async fn generate_title(
+    state: tauri::State<'_, AppState>,
+    conversation_id: String,
+    user_message: String,
+) -> Result<String, String> {
+    let api_key = {
+        let db = state.db.lock().unwrap();
+        db.get_setting("api_key")
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "API key not set".to_string())?
+    };
+
+    let body = serde_json::json!({
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 30,
+        "messages": [{
+            "role": "user",
+            "content": format!(
+                "Generate a short title (max 6 words, no quotes) for a conversation that starts with: {}",
+                if user_message.len() > 200 { &user_message[..200] } else { &user_message }
+            )
+        }]
+    });
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", &api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let title = json["content"][0]["text"]
+        .as_str()
+        .unwrap_or("New Conversation")
+        .trim()
+        .trim_matches('"')
+        .to_string();
+
+    // Update the conversation title in DB
+    {
+        let db = state.db.lock().unwrap();
+        db.rename_conversation_by_id(&conversation_id, &title)
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(title)
 }

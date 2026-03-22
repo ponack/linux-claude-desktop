@@ -6,6 +6,7 @@
 
   let apiKey = $state("");
   let model = $state("claude-sonnet-4-6");
+  let systemPrompt = $state("");
   let saved = $state(false);
   let error = $state("");
 
@@ -20,6 +21,8 @@
       const key = await invoke("get_api_key");
       if (key) apiKey = key;
       model = await invoke("get_model");
+      const sp = await invoke("get_system_prompt");
+      if (sp) systemPrompt = sp;
     } catch (e) {
       console.error("Failed to load settings:", e);
     }
@@ -31,6 +34,7 @@
     try {
       await invoke("set_api_key", { key: apiKey });
       await invoke("set_model", { model });
+      await invoke("set_system_prompt", { prompt: systemPrompt });
       saved = true;
       setTimeout(() => (saved = false), 2000);
     } catch (e) {
@@ -67,6 +71,19 @@
           <option value={m.id}>{m.name}</option>
         {/each}
       </select>
+    </div>
+
+    <div class="setting-group">
+      <label for="system-prompt">System Prompt</label>
+      <textarea
+        id="system-prompt"
+        bind:value={systemPrompt}
+        placeholder="You are a helpful assistant..."
+        rows="4"
+      ></textarea>
+      <p class="hint">
+        Optional. Sets the system prompt for all new conversations.
+      </p>
     </div>
 
     {#if error}
@@ -140,7 +157,21 @@
     transition: border-color 0.15s;
   }
 
-  input:focus, select:focus {
+  textarea {
+    padding: 10px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    transition: border-color 0.15s;
+  }
+
+  input:focus, select:focus, textarea:focus {
     border-color: var(--accent);
   }
 

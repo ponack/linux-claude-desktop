@@ -141,6 +141,11 @@ impl Database {
         Ok(())
     }
 
+    pub fn remove_setting(&self, key: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute("DELETE FROM settings WHERE key = ?1", params![key])?;
+        Ok(())
+    }
+
     pub fn update_message_content(&self, id: &str, content: &str) -> Result<(), rusqlite::Error> {
         self.conn.execute(
             "UPDATE messages SET content = ?1 WHERE id = ?2",
@@ -202,4 +207,18 @@ pub fn get_model(state: tauri::State<AppState>) -> Result<String, String> {
 #[tauri::command]
 pub fn set_model(state: tauri::State<AppState>, model: String) -> Result<(), String> {
     state.db.lock().unwrap().set_setting("model", &model).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_system_prompt(state: tauri::State<AppState>) -> Result<Option<String>, String> {
+    state.db.lock().unwrap().get_setting("system_prompt").map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_system_prompt(state: tauri::State<AppState>, prompt: String) -> Result<(), String> {
+    if prompt.trim().is_empty() {
+        state.db.lock().unwrap().remove_setting("system_prompt").map_err(|e| e.to_string())
+    } else {
+        state.db.lock().unwrap().set_setting("system_prompt", &prompt).map_err(|e| e.to_string())
+    }
 }
