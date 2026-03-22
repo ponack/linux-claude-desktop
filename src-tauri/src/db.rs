@@ -643,7 +643,7 @@ pub fn get_update_interval(state: tauri::State<AppState>) -> Result<String, Stri
     state.db.lock().unwrap()
         .get_setting("update_interval")
         .map_err(|e| e.to_string())
-        .map(|v| v.unwrap_or_else(|| "startup".to_string()))
+        .map(|v| v.unwrap_or_else(|| "86400000".to_string()))
 }
 
 #[tauri::command]
