@@ -32,9 +32,18 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 - Conversation management (create, rename, delete)
 - Persistent conversation history (SQLite)
 - Model selection (Opus 4.6, Sonnet 4.6, Haiku 4.5)
-- Markdown rendering with code blocks
+- Markdown rendering with syntax-highlighted code blocks
+- Copy button on code blocks
+- AI-generated conversation titles
+- Search/filter conversations
+- Custom system prompts
+- Image upload with Claude Vision API
+- Edit messages and regenerate responses
+- Light and dark theme
+- System tray integration (minimize to tray)
+- LaTeX/math rendering (KaTeX)
+- Keyboard shortcuts (Ctrl+N, Ctrl+K, Ctrl+,, Ctrl+L)
 - Stop generation mid-stream
-- Dark theme UI
 - Local API key storage
 
 ## Prerequisites
@@ -68,13 +77,21 @@ On first launch:
 3. Choose your preferred model
 4. Save, and start chatting
 
-## Building for Production
+## Install (Pre-built)
+
+Download the latest `.deb` from [Releases](https://github.com/ponack/ubuntu-claude-desktop/releases) and install:
+
+```bash
+sudo dpkg -i ubuntu-claude-desktop_*.deb
+```
+
+## Building from Source
 
 ```bash
 npm run tauri build
 ```
 
-This generates a `.deb` package in `src-tauri/target/release/bundle/deb/` that you can install directly.
+This generates a `.deb` package in `src-tauri/target/release/bundle/deb/` that you can install with `dpkg -i`.
 
 ## Project Structure
 
@@ -87,7 +104,7 @@ ubuntu-claude-desktop/
 │   │   ├── Chat.svelte           # Message list + input + streaming
 │   │   ├── MessageBubble.svelte  # Markdown rendering per message
 │   │   └── Settings.svelte       # API key + model configuration
-│   └── styles/global.css         # Dark theme CSS variables
+│   └── styles/global.css         # Light/dark theme CSS variables
 ├── src-tauri/                    # Rust backend (Tauri v2)
 │   └── src/
 │       ├── lib.rs                # App state + command registration
@@ -98,20 +115,20 @@ ubuntu-claude-desktop/
 
 ## Roadmap
 
-### Phase 1 — Polish
-- [ ] Copy button on code blocks
-- [ ] Syntax highlighting for code
-- [ ] AI-generated conversation titles
-- [ ] Search conversations
-- [ ] Custom system prompts
-- [ ] Keyboard shortcuts
+### Phase 1 — Polish ✅
+- [x] Copy button on code blocks
+- [x] Syntax highlighting for code
+- [x] AI-generated conversation titles
+- [x] Search conversations
+- [x] Custom system prompts
+- [x] Keyboard shortcuts
 
-### Phase 2 — Feature Parity
-- [ ] File and image upload (vision API)
-- [ ] Edit and regenerate messages
-- [ ] Light/dark theme toggle
-- [ ] System tray integration
-- [ ] LaTeX/math rendering
+### Phase 2 — Feature Parity ✅
+- [x] File and image upload (vision API)
+- [x] Edit and regenerate messages
+- [x] Light/dark theme toggle
+- [x] System tray integration
+- [x] LaTeX/math rendering
 
 ### Phase 3 — Power Features
 - [ ] Artifacts (sandboxed HTML/React preview)
