@@ -64,6 +64,25 @@ impl Database {
                 content TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS scheduled_prompts (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                interval_ms INTEGER NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                last_run TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS token_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                model TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+            );
             PRAGMA foreign_keys = ON;"
         )?;
 
@@ -77,6 +96,33 @@ impl Database {
             conn.execute_batch("ALTER TABLE conversations ADD COLUMN project_id TEXT;").ok();
         }
 
+        // Migration: create scheduled_prompts table if missing
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS scheduled_prompts (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                interval_ms INTEGER NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                last_run TEXT,
+                created_at TEXT NOT NULL
+            );"
+        ).ok();
+
+        // Migration: create token_usage table if missing
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS token_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                model TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+            );"
+        ).ok();
+
         // Migration: create projects table if missing
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS projects (
@@ -86,6 +132,21 @@ impl Database {
                 created_at TEXT NOT NULL
             );"
         ).ok();
+
+        // Migration: add workspace profile columns to projects
+        let has_provider: bool = conn
+            .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'")
+            .and_then(|mut s| s.query_row([], |row| row.get::<_, String>(0)))
+            .map(|sql| sql.contains("provider"))
+            .unwrap_or(false);
+        if !has_provider {
+            conn.execute_batch(
+                "ALTER TABLE projects ADD COLUMN provider TEXT;
+                 ALTER TABLE projects ADD COLUMN api_key TEXT;
+                 ALTER TABLE projects ADD COLUMN model TEXT;
+                 ALTER TABLE projects ADD COLUMN system_prompt TEXT;"
+            ).ok();
+        }
 
         Ok(Self { conn })
     }
@@ -204,7 +265,7 @@ impl Database {
 
     pub fn list_projects(&self) -> Result<Vec<Project>, rusqlite::Error> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, context, created_at FROM projects ORDER BY name ASC"
+            "SELECT id, name, context, created_at, provider, api_key, model, system_prompt FROM projects ORDER BY name ASC"
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(Project {
@@ -212,24 +273,28 @@ impl Database {
                 name: row.get(1)?,
                 context: row.get(2)?,
                 created_at: row.get(3)?,
+                provider: row.get(4)?,
+                api_key: row.get(5)?,
+                model: row.get(6)?,
+                system_prompt: row.get(7)?,
             })
         })?;
         rows.collect()
     }
 
-    pub fn insert_project(&self, id: &str, name: &str, context: &str) -> Result<(), rusqlite::Error> {
+    pub fn insert_project(&self, id: &str, name: &str, context: &str, provider: Option<&str>, api_key: Option<&str>, model: Option<&str>, system_prompt: Option<&str>) -> Result<(), rusqlite::Error> {
         let now = chrono::Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT INTO projects (id, name, context, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![id, name, context, &now],
+            "INSERT INTO projects (id, name, context, created_at, provider, api_key, model, system_prompt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![id, name, context, &now, provider, api_key, model, system_prompt],
         )?;
         Ok(())
     }
 
-    pub fn update_project(&self, id: &str, name: &str, context: &str) -> Result<(), rusqlite::Error> {
+    pub fn update_project(&self, id: &str, name: &str, context: &str, provider: Option<&str>, api_key: Option<&str>, model: Option<&str>, system_prompt: Option<&str>) -> Result<(), rusqlite::Error> {
         self.conn.execute(
-            "UPDATE projects SET name = ?1, context = ?2 WHERE id = ?3",
-            params![name, context, id],
+            "UPDATE projects SET name = ?1, context = ?2, provider = ?3, api_key = ?4, model = ?5, system_prompt = ?6 WHERE id = ?7",
+            params![name, context, provider, api_key, model, system_prompt, id],
         )?;
         Ok(())
     }
@@ -249,6 +314,28 @@ impl Database {
         }
     }
 
+    pub fn get_project(&self, project_id: &str) -> Result<Option<Project>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, context, created_at, provider, api_key, model, system_prompt FROM projects WHERE id = ?1"
+        )?;
+        let mut rows = stmt.query_map(params![project_id], |row| {
+            Ok(Project {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                context: row.get(2)?,
+                created_at: row.get(3)?,
+                provider: row.get(4)?,
+                api_key: row.get(5)?,
+                model: row.get(6)?,
+                system_prompt: row.get(7)?,
+            })
+        })?;
+        match rows.next() {
+            Some(Ok(p)) => Ok(Some(p)),
+            _ => Ok(None),
+        }
+    }
+
     pub fn set_conversation_project(&self, conversation_id: &str, project_id: Option<&str>) -> Result<(), rusqlite::Error> {
         self.conn.execute(
             "UPDATE conversations SET project_id = ?1 WHERE id = ?2",
@@ -264,6 +351,168 @@ impl Database {
             Some(Ok(val)) => Ok(val),
             _ => Ok(None),
         }
+    }
+
+    pub fn list_scheduled_prompts(&self) -> Result<Vec<ScheduledPrompt>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, prompt, interval_ms, enabled, last_run, created_at FROM scheduled_prompts ORDER BY name ASC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(ScheduledPrompt {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                prompt: row.get(2)?,
+                interval_ms: row.get(3)?,
+                enabled: row.get::<_, i64>(4)? != 0,
+                last_run: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn insert_scheduled_prompt(&self, id: &str, name: &str, prompt: &str, interval_ms: i64) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO scheduled_prompts (id, name, prompt, interval_ms, enabled, created_at) VALUES (?1, ?2, ?3, ?4, 1, ?5)",
+            params![id, name, prompt, interval_ms, &now],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_scheduled_prompt(&self, id: &str, name: &str, prompt: &str, interval_ms: i64, enabled: bool) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "UPDATE scheduled_prompts SET name = ?1, prompt = ?2, interval_ms = ?3, enabled = ?4 WHERE id = ?5",
+            params![name, prompt, interval_ms, enabled as i64, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_scheduled_prompt(&self, id: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute("DELETE FROM scheduled_prompts WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn update_scheduled_prompt_last_run(&self, id: &str) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE scheduled_prompts SET last_run = ?1 WHERE id = ?2",
+            params![&now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_due_scheduled_prompts(&self) -> Result<Vec<ScheduledPrompt>, rusqlite::Error> {
+        let now = chrono::Utc::now();
+        let all = self.list_scheduled_prompts()?;
+        Ok(all.into_iter().filter(|sp| {
+            if !sp.enabled { return false; }
+            match &sp.last_run {
+                Some(lr) => {
+                    if let Ok(last) = chrono::DateTime::parse_from_rfc3339(lr) {
+                        let elapsed = now.signed_duration_since(last).num_milliseconds();
+                        elapsed >= sp.interval_ms
+                    } else {
+                        true
+                    }
+                }
+                None => true,
+            }
+        }).collect())
+    }
+
+    pub fn fork_conversation(&self, source_conversation_id: &str, at_message_id: &str, new_title: &str) -> Result<String, rusqlite::Error> {
+        let new_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Get the created_at of the fork point message
+        let fork_at: String = self.conn.query_row(
+            "SELECT created_at FROM messages WHERE id = ?1",
+            params![at_message_id],
+            |row| row.get(0),
+        )?;
+
+        // Create the new conversation
+        self.conn.execute(
+            "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            params![&new_id, new_title, &now, &now],
+        )?;
+
+        // Copy the source project association
+        let project_id: Option<String> = self.conn.query_row(
+            "SELECT project_id FROM conversations WHERE id = ?1",
+            params![source_conversation_id],
+            |row| row.get(0),
+        ).unwrap_or(None);
+        if let Some(pid) = project_id {
+            self.conn.execute(
+                "UPDATE conversations SET project_id = ?1 WHERE id = ?2",
+                params![&pid, &new_id],
+            )?;
+        }
+
+        // Copy messages up to and including the fork point
+        let mut stmt = self.conn.prepare(
+            "SELECT id, role, content, created_at FROM messages WHERE conversation_id = ?1 AND created_at <= ?2 ORDER BY created_at ASC"
+        )?;
+        let messages: Vec<(String, String, String, String)> = stmt.query_map(
+            params![source_conversation_id, &fork_at],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?.filter_map(|r| r.ok()).collect();
+
+        for (_old_id, role, content, created_at) in &messages {
+            let msg_id = uuid::Uuid::new_v4().to_string();
+            self.conn.execute(
+                "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![&msg_id, &new_id, role, content, created_at],
+            )?;
+        }
+
+        Ok(new_id)
+    }
+
+    pub fn insert_token_usage(
+        &self,
+        conversation_id: &str,
+        message_id: &str,
+        input_tokens: i64,
+        output_tokens: i64,
+        model: &str,
+    ) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO token_usage (conversation_id, message_id, input_tokens, output_tokens, model, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![conversation_id, message_id, input_tokens, output_tokens, model, &now],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_conversation_token_usage(&self, conversation_id: &str) -> Result<TokenUsageSummary, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0), COUNT(*) FROM token_usage WHERE conversation_id = ?1"
+        )?;
+        stmt.query_row(params![conversation_id], |row| {
+            Ok(TokenUsageSummary {
+                input_tokens: row.get(0)?,
+                output_tokens: row.get(1)?,
+                total_tokens: row.get::<_, i64>(0)? + row.get::<_, i64>(1)?,
+                message_count: row.get(2)?,
+            })
+        })
+    }
+
+    pub fn get_total_token_usage(&self) -> Result<TokenUsageSummary, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0), COUNT(*) FROM token_usage"
+        )?;
+        stmt.query_row([], |row| {
+            Ok(TokenUsageSummary {
+                input_tokens: row.get(0)?,
+                output_tokens: row.get(1)?,
+                total_tokens: row.get::<_, i64>(0)? + row.get::<_, i64>(1)?,
+                message_count: row.get(2)?,
+            })
+        })
     }
 
     pub fn list_prompts(&self) -> Result<Vec<Prompt>, rusqlite::Error> {
@@ -310,6 +559,10 @@ pub struct Project {
     pub name: String,
     pub context: String,
     pub created_at: String,
+    pub provider: Option<String>,
+    pub api_key: Option<String>,
+    pub model: Option<String>,
+    pub system_prompt: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -318,6 +571,25 @@ pub struct Prompt {
     pub name: String,
     pub content: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ScheduledPrompt {
+    pub id: String,
+    pub name: String,
+    pub prompt: String,
+    pub interval_ms: i64,
+    pub enabled: bool,
+    pub last_run: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TokenUsageSummary {
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub total_tokens: i64,
+    pub message_count: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -443,15 +715,15 @@ pub fn get_projects(state: tauri::State<AppState>) -> Result<Vec<Project>, Strin
 }
 
 #[tauri::command]
-pub fn create_project(state: tauri::State<AppState>, name: String, context: String) -> Result<String, String> {
+pub fn create_project(state: tauri::State<AppState>, name: String, context: String, provider: Option<String>, api_key: Option<String>, model: Option<String>, system_prompt: Option<String>) -> Result<String, String> {
     let id = uuid::Uuid::new_v4().to_string();
-    state.db.lock().unwrap().insert_project(&id, &name, &context).map_err(|e| e.to_string())?;
+    state.db.lock().unwrap().insert_project(&id, &name, &context, provider.as_deref(), api_key.as_deref(), model.as_deref(), system_prompt.as_deref()).map_err(|e| e.to_string())?;
     Ok(id)
 }
 
 #[tauri::command]
-pub fn update_project(state: tauri::State<AppState>, id: String, name: String, context: String) -> Result<(), String> {
-    state.db.lock().unwrap().update_project(&id, &name, &context).map_err(|e| e.to_string())
+pub fn update_project(state: tauri::State<AppState>, id: String, name: String, context: String, provider: Option<String>, api_key: Option<String>, model: Option<String>, system_prompt: Option<String>) -> Result<(), String> {
+    state.db.lock().unwrap().update_project(&id, &name, &context, provider.as_deref(), api_key.as_deref(), model.as_deref(), system_prompt.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -608,6 +880,58 @@ pub fn update_prompt(state: tauri::State<AppState>, id: String, name: String, co
 #[tauri::command]
 pub fn delete_prompt(state: tauri::State<AppState>, id: String) -> Result<(), String> {
     state.db.lock().unwrap().delete_prompt_by_id(&id).map_err(|e| e.to_string())
+}
+
+// --- Scheduled Prompts ---
+
+#[tauri::command]
+pub fn get_scheduled_prompts(state: tauri::State<AppState>) -> Result<Vec<ScheduledPrompt>, String> {
+    state.db.lock().unwrap().list_scheduled_prompts().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_scheduled_prompt(state: tauri::State<AppState>, name: String, prompt: String, interval_ms: i64) -> Result<String, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    state.db.lock().unwrap().insert_scheduled_prompt(&id, &name, &prompt, interval_ms).map_err(|e| e.to_string())?;
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn update_scheduled_prompt(state: tauri::State<AppState>, id: String, name: String, prompt: String, interval_ms: i64, enabled: bool) -> Result<(), String> {
+    state.db.lock().unwrap().update_scheduled_prompt(&id, &name, &prompt, interval_ms, enabled).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_scheduled_prompt(state: tauri::State<AppState>, id: String) -> Result<(), String> {
+    state.db.lock().unwrap().delete_scheduled_prompt(&id).map_err(|e| e.to_string())
+}
+
+// --- Conversation Branching ---
+
+#[tauri::command]
+pub fn fork_conversation(state: tauri::State<AppState>, conversation_id: String, message_id: String) -> Result<String, String> {
+    let db = state.db.lock().unwrap();
+    // Generate a title for the fork
+    let title = db.conn.query_row(
+        "SELECT title FROM conversations WHERE id = ?1",
+        params![conversation_id],
+        |row| row.get::<_, String>(0),
+    ).map(|t| format!("{} (fork)", t))
+    .unwrap_or_else(|_| "Forked conversation".to_string());
+
+    db.fork_conversation(&conversation_id, &message_id, &title).map_err(|e| e.to_string())
+}
+
+// --- Token Usage ---
+
+#[tauri::command]
+pub fn get_conversation_usage(state: tauri::State<AppState>, conversation_id: String) -> Result<TokenUsageSummary, String> {
+    state.db.lock().unwrap().get_conversation_token_usage(&conversation_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_total_usage(state: tauri::State<AppState>) -> Result<TokenUsageSummary, String> {
+    state.db.lock().unwrap().get_total_token_usage().map_err(|e| e.to_string())
 }
 
 // --- Custom Commands (Plugin System) ---

@@ -25,21 +25,35 @@
   let showCommandPicker = $state(false);
   let activeModel = $state("");
   let activeProvider = $state("");
+  let tokenUsage = $state(null);
+  let promptVariableDialog = $state(null); // { content, variables: [{name, value}] }
+  let agentMode = $state(false);
+  let agentSteps = $state([]); // [{step, description, status}]
+  let agentRunning = $state(false);
 
   async function loadMessages() {
     if (!conversationId) {
       messages = [];
       activeArtifact = null;
       currentProjectId = null;
+      tokenUsage = null;
       return;
     }
     try {
       messages = await invoke("get_messages", { conversationId });
       const projId = await invoke("get_conversation_project", { conversationId });
       currentProjectId = projId || null;
+      loadTokenUsage();
     } catch (e) {
       console.error("Failed to load messages:", e);
     }
+  }
+
+  async function loadTokenUsage() {
+    if (!conversationId) { tokenUsage = null; return; }
+    try {
+      tokenUsage = await invoke("get_conversation_usage", { conversationId });
+    } catch (e) { tokenUsage = null; }
   }
 
   async function loadProjects() {
@@ -101,8 +115,33 @@
   }
 
   function insertPrompt(prompt) {
-    inputText = prompt.content;
     showPromptPicker = false;
+    const varPattern = /\{\{(\w+(?:\s+\w+)*)\}\}/g;
+    const matches = [...prompt.content.matchAll(varPattern)];
+    const uniqueVars = [...new Set(matches.map(m => m[1]))];
+
+    if (uniqueVars.length > 0) {
+      promptVariableDialog = {
+        content: prompt.content,
+        variables: uniqueVars.map(name => ({ name, value: "" })),
+      };
+    } else {
+      inputText = prompt.content;
+    }
+  }
+
+  function applyPromptVariables() {
+    if (!promptVariableDialog) return;
+    let result = promptVariableDialog.content;
+    for (const v of promptVariableDialog.variables) {
+      result = result.replaceAll(`{{${v.name}}}`, v.value);
+    }
+    inputText = result;
+    promptVariableDialog = null;
+  }
+
+  function cancelPromptVariables() {
+    promptVariableDialog = null;
   }
 
   let filteredCommands = $derived(
@@ -145,6 +184,10 @@
   }
 
   onMount(() => {
+    const unlistenUsage = listen("token-usage", () => {
+      loadTokenUsage();
+    });
+
     const unlisten = listen("stream-event", (event) => {
       const { event: eventType, content, message_id } = event.payload;
 
@@ -158,7 +201,35 @@
       } else if (eventType === "done") {
         isStreaming = false;
         streamingMessageId = null;
-        notifyIfBackground("Response complete", "Claude has finished responding.");
+
+        // Agent mode: auto-continue if response contains [CONTINUE]
+        if (agentMode && agentRunning) {
+          const lastMsg = messages.find(m => m.id === message_id);
+          const content = lastMsg?.content || "";
+          if (content.includes("[CONTINUE]") && !content.includes("[DONE]")) {
+            // Parse step info
+            const stepMatch = content.match(/\[STEP (\d+)\/(\d+)\]/);
+            if (stepMatch) {
+              const current = parseInt(stepMatch[1]);
+              const total = parseInt(stepMatch[2]);
+              agentSteps = Array.from({length: total}, (_, i) => ({
+                step: i + 1,
+                status: i < current ? "done" : i === current ? "active" : "pending",
+              }));
+            }
+            // Auto-send continuation
+            setTimeout(() => {
+              inputText = "Continue with the next step.";
+              sendMessage();
+            }, 500);
+          } else {
+            agentRunning = false;
+            agentSteps = [];
+            notifyIfBackground("Agent complete", "All steps have been completed.");
+          }
+        } else {
+          notifyIfBackground("Response complete", "Claude has finished responding.");
+        }
       } else if (eventType === "error") {
         isStreaming = false;
         streamingMessageId = null;
@@ -178,6 +249,7 @@
 
     return () => {
       unlisten.then((fn) => fn());
+      unlistenUsage.then((fn) => fn());
     };
   });
 
@@ -304,9 +376,22 @@
     }
   }
 
+  const AGENT_PREFIX = `You are in agent mode. Break down the user's request into clear steps. For each response:
+1. State which step you're on: [STEP X/Y]
+2. Execute that step fully
+3. End with [CONTINUE] if more steps remain, or [DONE] if all steps are complete
+Be thorough in each step. Do not skip steps or combine them.`;
+
   async function sendMessage() {
-    const text = inputText.trim();
+    let text = inputText.trim();
     if ((!text && attachments.length === 0) || isStreaming) return;
+
+    // If agent mode is on and this is the first message (triggering agent), prepend instruction
+    if (agentMode && !agentRunning && text !== "Continue with the next step.") {
+      text = `${AGENT_PREFIX}\n\nUser request: ${text}`;
+      agentRunning = true;
+      agentSteps = [{ step: 1, status: "active" }];
+    }
 
     inputText = "";
     const currentAttachments = [...attachments];
@@ -414,6 +499,16 @@
     }
   }
 
+  async function handleFork(messageId) {
+    if (!conversationId) return;
+    try {
+      const newConvId = await invoke("fork_conversation", { conversationId, messageId });
+      onConversationCreated(newConvId);
+    } catch (e) {
+      console.error("Fork failed:", e);
+    }
+  }
+
   async function stopGeneration() {
     try {
       await invoke("stop_generation");
@@ -486,7 +581,17 @@
             {/each}
           </select>
         {/if}
+        {#if tokenUsage && tokenUsage.total_tokens > 0}
+          <span class="token-usage" title="Input: {tokenUsage.input_tokens.toLocaleString()} | Output: {tokenUsage.output_tokens.toLocaleString()}">
+            {tokenUsage.total_tokens.toLocaleString()} tokens
+          </span>
+        {/if}
         <div class="toolbar-actions">
+          <button class="toolbar-btn" onclick={() => invoke("popout_conversation", { conversationId })} title="Open in new window" aria-label="Open in new window">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </button>
           <button class="toolbar-btn" onclick={() => exportConversation("markdown")} title="Export as Markdown" aria-label="Export as Markdown">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -519,11 +624,23 @@
           isStreaming={isStreaming && message.id === streamingMessageId}
           onEdit={handleEdit}
           onRegenerate={handleRegenerate}
+          onFork={conversationId ? handleFork : null}
           onPreviewArtifact={handlePreviewArtifact}
           onRetry={message.retryContent ? () => retryMessage(message) : null}
         />
       {/each}
     </div>
+
+    {#if agentRunning && agentSteps.length > 1}
+      <div class="agent-progress">
+        <span class="agent-label">Agent</span>
+        {#each agentSteps as step}
+          <div class="agent-step" class:done={step.status === "done"} class:active={step.status === "active"}>
+            {step.step}
+          </div>
+        {/each}
+      </div>
+    {/if}
 
     <div class="input-area" class:dragging={isDragging}
       ondragover={handleDragOver} ondragleave={handleDragLeave} ondrop={handleDrop}>
@@ -574,6 +691,11 @@
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
         </svg>
       </button>
+      <button class="attach-btn" class:agent-active={agentMode} onclick={() => (agentMode = !agentMode)} disabled={isStreaming && agentRunning} title={agentMode ? "Agent mode ON — multi-step execution" : "Enable agent mode"} aria-label="Toggle agent mode">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-2.34l2.83-2.83m11.66-11.66l2.83-2.83M1 12h4m14 0h4m-2.34 8.66l-2.83-2.83M4.17 4.17L7 7"/>
+        </svg>
+      </button>
       <button class="attach-btn" onclick={() => (showPromptPicker = !showPromptPicker)} disabled={isStreaming} title="Insert a saved prompt from your library" aria-label="Prompt library">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
@@ -610,6 +732,31 @@
   {/if}
 </div>
 
+{#if promptVariableDialog}
+  <div class="variable-overlay" onclick={cancelPromptVariables} role="dialog" aria-label="Fill in prompt variables">
+    <div class="variable-dialog" onclick={(e) => e.stopPropagation()}>
+      <h3>Fill in Variables</h3>
+      <div class="variable-list">
+        {#each promptVariableDialog.variables as variable, i}
+          <label class="variable-field">
+            <span class="variable-name">{variable.name}</span>
+            <input
+              type="text"
+              bind:value={promptVariableDialog.variables[i].value}
+              placeholder="Enter value for {variable.name}"
+              onkeydown={(e) => e.key === "Enter" && applyPromptVariables()}
+            />
+          </label>
+        {/each}
+      </div>
+      <div class="variable-actions">
+        <button class="var-btn primary" onclick={applyPromptVariables}>Apply</button>
+        <button class="var-btn" onclick={cancelPromptVariables}>Cancel</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   .chat-container {
     display: flex;
@@ -645,6 +792,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 200px;
+  }
+
+  .token-usage {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    cursor: default;
   }
 
   .toolbar-actions {
@@ -871,5 +1028,130 @@
   .cmd-desc {
     font-size: 11px;
     color: var(--text-muted);
+  }
+
+  .variable-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+  }
+
+  .variable-dialog {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    width: 400px;
+    max-width: 90vw;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+
+  .variable-dialog h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  .variable-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .variable-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .variable-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+  }
+
+  .variable-field input {
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+  }
+
+  .variable-field input:focus {
+    border-color: var(--accent);
+  }
+
+  .variable-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .var-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+
+  .var-btn:hover { background: var(--bg-tertiary); }
+  .var-btn.primary { background: var(--accent); color: white; border: none; }
+  .var-btn.primary:hover { background: var(--accent-hover); }
+
+  .agent-active {
+    color: var(--accent) !important;
+    background: rgba(78, 204, 163, 0.15);
+  }
+
+  .agent-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 20px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+  }
+
+  .agent-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 4px;
+  }
+
+  .agent-step {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    transition: all 0.2s;
+  }
+
+  .agent-step.done {
+    background: var(--accent);
+    color: white;
+  }
+
+  .agent-step.active {
+    background: rgba(78, 204, 163, 0.3);
+    color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent);
   }
 </style>

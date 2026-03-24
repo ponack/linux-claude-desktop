@@ -205,15 +205,15 @@ ubuntu-claude-desktop/
 - [x] Quick-ask floating overlay window (Super+Shift+Q)
 - [x] DBus interface for scripting/automation
 
-### Phase 6 — Workflows & Productivity
-- [ ] Conversation branching (fork at any message)
-- [ ] Prompt library/templates with variable placeholders
-- [ ] Command palette (Ctrl+P)
-- [ ] Agent mode (multi-step autonomous task execution)
-- [ ] Scheduled/recurring prompts
-- [ ] Workspace profiles (per-project API keys, models, prompts)
-- [ ] Conversation analytics and token usage tracking
-- [ ] Multi-window support
+### Phase 6 — Workflows & Productivity ✅
+- [x] Conversation branching (fork at any message)
+- [x] Prompt library/templates with variable placeholders
+- [x] Command palette (Ctrl+P)
+- [x] Agent mode (multi-step autonomous task execution)
+- [x] Scheduled/recurring prompts
+- [x] Workspace profiles (per-project API keys, models, prompts)
+- [x] Conversation analytics and token usage tracking
+- [x] Multi-window support
 
 ### Phase 7 — Scale & Reliability
 - [ ] Conversation pagination / virtual scroll

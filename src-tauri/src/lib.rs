@@ -7,6 +7,7 @@ mod providers;
 use db::Database;
 use std::sync::Mutex;
 use tauri::{
+    Emitter,
     Manager,
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
@@ -69,6 +70,30 @@ pub fn run() {
                 dbus_service::start_dbus_service(app_handle).await;
             });
 
+            // Start scheduled prompts background task
+            let app_handle2 = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    let state = app_handle2.state::<AppState>();
+                    let due = {
+                        let db = state.db.lock().unwrap();
+                        db.get_due_scheduled_prompts().unwrap_or_default()
+                    };
+                    for sp in &due {
+                        // Emit event to frontend to execute the prompt
+                        let _ = app_handle2.emit("scheduled-prompt", serde_json::json!({
+                            "id": sp.id,
+                            "name": sp.name,
+                            "prompt": sp.prompt,
+                        }));
+                        // Update last_run
+                        let db = state.db.lock().unwrap();
+                        let _ = db.update_scheduled_prompt_last_run(&sp.id);
+                    }
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -92,6 +117,7 @@ pub fn run() {
             api::get_app_info,
             api::run_custom_command,
             api::capture_screenshot,
+            api::popout_conversation,
             api::toggle_quickask,
             providers::fetch_ollama_models,
             db::get_conversations,
@@ -137,6 +163,13 @@ pub fn run() {
             db::set_update_interval,
             db::get_skipped_version,
             db::set_skipped_version,
+            db::get_scheduled_prompts,
+            db::create_scheduled_prompt,
+            db::update_scheduled_prompt,
+            db::delete_scheduled_prompt,
+            db::fork_conversation,
+            db::get_conversation_usage,
+            db::get_total_usage,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

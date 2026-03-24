@@ -45,8 +45,18 @@
   let newCmdCommand = $state("");
   let newCmdDescription = $state("");
 
+  // Scheduled Prompts
+  let scheduledPrompts = $state([]);
+  let newSchedName = $state("");
+  let newSchedPrompt = $state("");
+  let newSchedInterval = $state("3600000"); // 1 hour default
+  let editingSched = $state(null);
+
   // Update settings
   let updateInterval = $state("86400000");
+
+  // Token Usage Analytics
+  let totalUsage = $state(null);
 
   // About
   let appVersion = $state("");
@@ -90,6 +100,7 @@
       await loadMcpServers();
       await loadPrompts();
       await loadCustomCommands();
+      await loadScheduledPrompts();
       updateInterval = await invoke("get_update_interval");
 
       try {
@@ -97,6 +108,10 @@
         appVersion = info.version;
         appArch = info.arch;
         appOs = info.os;
+      } catch (_) {}
+
+      try {
+        totalUsage = await invoke("get_total_usage");
       } catch (_) {}
 
       if (provider === "ollama") {
@@ -167,18 +182,40 @@
     catch (e) { console.error("Failed to load projects:", e); }
   }
 
+  let newProjectProvider = $state("");
+  let newProjectApiKey = $state("");
+  let newProjectModel = $state("");
+  let newProjectSystemPrompt = $state("");
+
   async function addProject() {
     if (!newProjectName.trim()) return;
     try {
-      await invoke("create_project", { name: newProjectName.trim(), context: newProjectContext.trim() });
+      await invoke("create_project", {
+        name: newProjectName.trim(),
+        context: newProjectContext.trim(),
+        provider: newProjectProvider || null,
+        apiKey: newProjectApiKey || null,
+        model: newProjectModel || null,
+        systemPrompt: newProjectSystemPrompt || null,
+      });
       newProjectName = ""; newProjectContext = "";
+      newProjectProvider = ""; newProjectApiKey = "";
+      newProjectModel = ""; newProjectSystemPrompt = "";
       await loadProjects();
     } catch (e) { error = String(e); }
   }
 
   async function saveProject(project) {
     try {
-      await invoke("update_project", { id: project.id, name: project.name, context: project.context });
+      await invoke("update_project", {
+        id: project.id,
+        name: project.name,
+        context: project.context,
+        provider: project.provider || null,
+        apiKey: project.api_key || null,
+        model: project.model || null,
+        systemPrompt: project.system_prompt || null,
+      });
       editingProject = null;
       await loadProjects();
     } catch (e) { error = String(e); }
@@ -187,6 +224,47 @@
   async function removeProject(id) {
     try { await invoke("delete_project", { id }); await loadProjects(); }
     catch (e) { error = String(e); }
+  }
+
+  async function loadScheduledPrompts() {
+    try { scheduledPrompts = await invoke("get_scheduled_prompts"); }
+    catch (e) { console.error("Failed to load scheduled prompts:", e); }
+  }
+
+  async function addScheduledPrompt() {
+    if (!newSchedName.trim() || !newSchedPrompt.trim()) return;
+    try {
+      await invoke("create_scheduled_prompt", {
+        name: newSchedName.trim(),
+        prompt: newSchedPrompt.trim(),
+        intervalMs: parseInt(newSchedInterval) || 3600000,
+      });
+      newSchedName = ""; newSchedPrompt = ""; newSchedInterval = "3600000";
+      await loadScheduledPrompts();
+    } catch (e) { error = String(e); }
+  }
+
+  async function saveScheduledPrompt(sp) {
+    try {
+      await invoke("update_scheduled_prompt", {
+        id: sp.id, name: sp.name, prompt: sp.prompt,
+        intervalMs: sp.interval_ms, enabled: sp.enabled,
+      });
+      editingSched = null;
+      await loadScheduledPrompts();
+    } catch (e) { error = String(e); }
+  }
+
+  async function removeScheduledPrompt(id) {
+    try { await invoke("delete_scheduled_prompt", { id }); await loadScheduledPrompts(); }
+    catch (e) { error = String(e); }
+  }
+
+  function formatInterval(ms) {
+    if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
+    if (ms >= 3600000) return `${Math.round(ms / 3600000)}h`;
+    if (ms >= 60000) return `${Math.round(ms / 60000)}m`;
+    return `${ms}ms`;
   }
 
   async function loadPrompts() {
@@ -521,13 +599,24 @@
 
     <div class="setting-group">
       <label>Projects</label>
-      <p class="hint">Projects inject persistent context into conversations assigned to them.</p>
+      <p class="hint">Projects inject context and can override provider, model, API key, and system prompt per-workspace.</p>
 
       {#each projects as project (project.id)}
         <div class="project-item">
           {#if editingProject === project.id}
             <input type="text" bind:value={project.name} placeholder="Project name" />
             <textarea bind:value={project.context} placeholder="Project context/instructions..." rows="3"></textarea>
+            <div class="workspace-fields">
+              <select bind:value={project.provider}>
+                <option value="">Default provider</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="openai">OpenAI</option>
+                <option value="ollama">Ollama</option>
+              </select>
+              <input type="password" bind:value={project.api_key} placeholder="API key override (optional)" />
+              <input type="text" bind:value={project.model} placeholder="Model override (optional)" />
+              <textarea bind:value={project.system_prompt} placeholder="System prompt override (optional)" rows="2"></textarea>
+            </div>
             <div class="project-actions">
               <button class="small-btn accent" onclick={() => saveProject(project)}>Save</button>
               <button class="small-btn" onclick={() => (editingProject = null)}>Cancel</button>
@@ -543,6 +632,9 @@
             {#if project.context}
               <p class="project-context-preview">{project.context.length > 100 ? project.context.slice(0, 100) + '...' : project.context}</p>
             {/if}
+            {#if project.provider || project.model}
+              <p class="project-overrides">{[project.provider, project.model].filter(Boolean).join(" / ")}</p>
+            {/if}
           {/if}
         </div>
       {/each}
@@ -550,6 +642,20 @@
       <div class="new-project">
         <input type="text" bind:value={newProjectName} placeholder="New project name" />
         <textarea bind:value={newProjectContext} placeholder="Project context/instructions (optional)" rows="2"></textarea>
+        <details class="workspace-details">
+          <summary>Workspace overrides (optional)</summary>
+          <div class="workspace-fields">
+            <select bind:value={newProjectProvider}>
+              <option value="">Default provider</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
+              <option value="ollama">Ollama</option>
+            </select>
+            <input type="password" bind:value={newProjectApiKey} placeholder="API key override" />
+            <input type="text" bind:value={newProjectModel} placeholder="Model override" />
+            <textarea bind:value={newProjectSystemPrompt} placeholder="System prompt override" rows="2"></textarea>
+          </div>
+        </details>
         <button class="small-btn accent" onclick={addProject} disabled={!newProjectName.trim()}>
           Add Project
         </button>
@@ -611,9 +717,93 @@
       <p class="error">{error}</p>
     {/if}
 
+    <div class="setting-group">
+      <label>Scheduled Prompts</label>
+      <p class="hint">Automatically send prompts at recurring intervals. Creates a new conversation each time.</p>
+
+      {#each scheduledPrompts as sp (sp.id)}
+        <div class="project-item">
+          {#if editingSched === sp.id}
+            <input type="text" bind:value={sp.name} placeholder="Name" />
+            <textarea bind:value={sp.prompt} placeholder="Prompt text..." rows="2"></textarea>
+            <select bind:value={sp.interval_ms}>
+              <option value={300000}>Every 5 minutes</option>
+              <option value={900000}>Every 15 minutes</option>
+              <option value={1800000}>Every 30 minutes</option>
+              <option value={3600000}>Every hour</option>
+              <option value={21600000}>Every 6 hours</option>
+              <option value={43200000}>Every 12 hours</option>
+              <option value={86400000}>Every day</option>
+            </select>
+            <div class="project-actions">
+              <button class="small-btn accent" onclick={() => saveScheduledPrompt(sp)}>Save</button>
+              <button class="small-btn" onclick={() => (editingSched = null)}>Cancel</button>
+            </div>
+          {:else}
+            <div class="project-header">
+              <span class="project-name">
+                {sp.name}
+                <span class="sched-interval">{formatInterval(sp.interval_ms)}</span>
+                {#if !sp.enabled}<span class="sched-disabled">paused</span>{/if}
+              </span>
+              <div class="project-actions">
+                <button class="small-btn" onclick={() => { sp.enabled = !sp.enabled; saveScheduledPrompt(sp); }}>
+                  {sp.enabled ? "Pause" : "Resume"}
+                </button>
+                <button class="small-btn" onclick={() => (editingSched = sp.id)}>Edit</button>
+                <button class="small-btn danger" onclick={() => removeScheduledPrompt(sp.id)}>Delete</button>
+              </div>
+            </div>
+            <p class="project-context-preview">{sp.prompt.length > 80 ? sp.prompt.slice(0, 80) + '...' : sp.prompt}</p>
+          {/if}
+        </div>
+      {/each}
+
+      <div class="new-project">
+        <input type="text" bind:value={newSchedName} placeholder="Schedule name" />
+        <textarea bind:value={newSchedPrompt} placeholder="Prompt to send..." rows="2"></textarea>
+        <select bind:value={newSchedInterval}>
+          <option value="300000">Every 5 minutes</option>
+          <option value="900000">Every 15 minutes</option>
+          <option value="1800000">Every 30 minutes</option>
+          <option value="3600000">Every hour</option>
+          <option value="21600000">Every 6 hours</option>
+          <option value="43200000">Every 12 hours</option>
+          <option value="86400000">Every day</option>
+        </select>
+        <button class="small-btn accent" onclick={addScheduledPrompt} disabled={!newSchedName.trim() || !newSchedPrompt.trim()}>
+          Add Schedule
+        </button>
+      </div>
+    </div>
+
     <button class="save-btn" onclick={save}>
       {saved ? "Saved!" : "Save Settings"}
     </button>
+
+    {#if totalUsage}
+    <div class="about-section">
+      <h3>Token Usage</h3>
+      <div class="usage-grid">
+        <div class="usage-stat">
+          <span class="usage-value">{totalUsage.input_tokens.toLocaleString()}</span>
+          <span class="usage-label">Input Tokens</span>
+        </div>
+        <div class="usage-stat">
+          <span class="usage-value">{totalUsage.output_tokens.toLocaleString()}</span>
+          <span class="usage-label">Output Tokens</span>
+        </div>
+        <div class="usage-stat">
+          <span class="usage-value">{totalUsage.total_tokens.toLocaleString()}</span>
+          <span class="usage-label">Total Tokens</span>
+        </div>
+        <div class="usage-stat">
+          <span class="usage-value">{totalUsage.message_count.toLocaleString()}</span>
+          <span class="usage-label">Messages</span>
+        </div>
+      </div>
+    </div>
+    {/if}
 
     <div class="about-section">
       <h3>About</h3>
@@ -783,6 +973,93 @@
   .small-btn.accent:disabled { opacity: 0.4; cursor: not-allowed; }
   .small-btn.danger { color: var(--danger); border-color: var(--danger); }
   .small-btn.danger:hover { background: rgba(233, 69, 96, 0.1); }
+
+  .workspace-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .workspace-fields select,
+  .workspace-fields input,
+  .workspace-fields textarea {
+    padding: 6px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    outline: none;
+  }
+
+  .workspace-fields select:focus,
+  .workspace-fields input:focus,
+  .workspace-fields textarea:focus {
+    border-color: var(--accent);
+  }
+
+  .workspace-details {
+    margin-top: 4px;
+  }
+
+  .workspace-details summary {
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .sched-interval {
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(78, 204, 163, 0.15);
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+  }
+
+  .sched-disabled {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 4px;
+  }
+
+  .project-overrides {
+    font-size: 11px;
+    color: var(--accent);
+    margin-top: 2px;
+  }
+
+  .usage-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .usage-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+  }
+
+  .usage-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+  }
+
+  .usage-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
 
   .about-section {
     margin-top: 32px;
