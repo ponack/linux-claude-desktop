@@ -1142,7 +1142,34 @@ pub struct ScreenshotResult {
     pub media_type: String,
 }
 
-/// Toggle the quick-ask overlay window
+/// Open a conversation in a separate window
+#[tauri::command]
+pub async fn popout_conversation(app: tauri::AppHandle, conversation_id: String) -> Result<(), String> {
+    let label = format!("conv-{}", &conversation_id[..8.min(conversation_id.len())]);
+
+    if let Some(win) = app.get_webview_window(&label) {
+        win.show().map_err(|e| e.to_string())?;
+        win.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    let url = format!("index.html?conversation={}", conversation_id);
+    let win = tauri::WebviewWindowBuilder::new(
+        &app,
+        &label,
+        tauri::WebviewUrl::App(url.into()),
+    )
+    .title("Chat")
+    .inner_size(800.0, 600.0)
+    .resizable(true)
+    .decorations(true)
+    .center()
+    .build()
+    .map_err(|e| e.to_string())?;
+    win.set_focus().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn toggle_quickask(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("quickask") {

@@ -92,6 +92,7 @@ pub fn run() {
             api::get_app_info,
             api::run_custom_command,
             api::capture_screenshot,
+            api::popout_conversation,
             api::toggle_quickask,
             providers::fetch_ollama_models,
             db::get_conversations,
