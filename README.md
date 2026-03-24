@@ -218,9 +218,18 @@ ubuntu-claude-desktop/
 ### Phase 7 — Scale & Reliability
 - [ ] Conversation pagination / virtual scroll
 - [ ] Database backup and restore
-- [ ] Token usage tracking per conversation
 - [ ] Performance profiling and optimization
 - [ ] Offline mode (queue messages when disconnected)
+
+### Phase 8 — Co-Work (Artifacts)
+- [ ] Persistent artifacts panel (side panel alongside chat)
+- [ ] Artifact types (Code, Markdown, Mermaid diagrams, HTML/SVG, React components)
+- [ ] Live editing with syntax highlighting
+- [ ] Iterate with Claude (send artifact state back for modification)
+- [ ] Multiple artifacts per conversation (tab-based management)
+- [ ] Artifact versioning (diff between versions, revert)
+- [ ] Artifact persistence (save to DB, restore on reopen)
+- [ ] Export artifacts (save to file, clipboard, open in external editor)
 
 ## Tech Stack
 
