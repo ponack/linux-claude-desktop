@@ -455,6 +455,16 @@
     }
   }
 
+  async function handleFork(messageId) {
+    if (!conversationId) return;
+    try {
+      const newConvId = await invoke("fork_conversation", { conversationId, messageId });
+      onConversationCreated(newConvId);
+    } catch (e) {
+      console.error("Fork failed:", e);
+    }
+  }
+
   async function stopGeneration() {
     try {
       await invoke("stop_generation");
@@ -565,6 +575,7 @@
           isStreaming={isStreaming && message.id === streamingMessageId}
           onEdit={handleEdit}
           onRegenerate={handleRegenerate}
+          onFork={conversationId ? handleFork : null}
           onPreviewArtifact={handlePreviewArtifact}
           onRetry={message.retryContent ? () => retryMessage(message) : null}
         />

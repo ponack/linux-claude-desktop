@@ -137,6 +137,7 @@ pub fn run() {
             db::set_update_interval,
             db::get_skipped_version,
             db::set_skipped_version,
+            db::fork_conversation,
             db::get_conversation_usage,
             db::get_total_usage,
         ])

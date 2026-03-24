@@ -5,7 +5,7 @@
   import "katex/dist/katex.min.css";
   import { tick } from "svelte";
 
-  let { role, content, isStreaming, onEdit, onRegenerate, messageId, onPreviewArtifact, onRetry } = $props();
+  let { role, content, isStreaming, onEdit, onRegenerate, onFork, messageId, onPreviewArtifact, onRetry } = $props();
   let messageEl;
   let isEditing = $state(false);
   let editText = $state("");
@@ -190,6 +190,14 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="23 4 23 10 17 10"/>
               <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+            </svg>
+          </button>
+        {/if}
+        {#if onFork}
+          <button class="action-btn" onclick={() => onFork(messageId)} title="Fork conversation from here" aria-label="Fork conversation">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/>
+              <path d="M6 9v6c0 1.66 1.34 3 3 3h3"/><line x1="18" y1="9" x2="18" y2="15"/>
             </svg>
           </button>
         {/if}

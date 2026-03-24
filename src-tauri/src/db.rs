@@ -290,6 +290,56 @@ impl Database {
         }
     }
 
+    pub fn fork_conversation(&self, source_conversation_id: &str, at_message_id: &str, new_title: &str) -> Result<String, rusqlite::Error> {
+        let new_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Get the created_at of the fork point message
+        let fork_at: String = self.conn.query_row(
+            "SELECT created_at FROM messages WHERE id = ?1",
+            params![at_message_id],
+            |row| row.get(0),
+        )?;
+
+        // Create the new conversation
+        self.conn.execute(
+            "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+            params![&new_id, new_title, &now, &now],
+        )?;
+
+        // Copy the source project association
+        let project_id: Option<String> = self.conn.query_row(
+            "SELECT project_id FROM conversations WHERE id = ?1",
+            params![source_conversation_id],
+            |row| row.get(0),
+        ).unwrap_or(None);
+        if let Some(pid) = project_id {
+            self.conn.execute(
+                "UPDATE conversations SET project_id = ?1 WHERE id = ?2",
+                params![&pid, &new_id],
+            )?;
+        }
+
+        // Copy messages up to and including the fork point
+        let mut stmt = self.conn.prepare(
+            "SELECT id, role, content, created_at FROM messages WHERE conversation_id = ?1 AND created_at <= ?2 ORDER BY created_at ASC"
+        )?;
+        let messages: Vec<(String, String, String, String)> = stmt.query_map(
+            params![source_conversation_id, &fork_at],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?.filter_map(|r| r.ok()).collect();
+
+        for (_old_id, role, content, created_at) in &messages {
+            let msg_id = uuid::Uuid::new_v4().to_string();
+            self.conn.execute(
+                "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![&msg_id, &new_id, role, content, created_at],
+            )?;
+        }
+
+        Ok(new_id)
+    }
+
     pub fn insert_token_usage(
         &self,
         conversation_id: &str,
@@ -684,6 +734,22 @@ pub fn update_prompt(state: tauri::State<AppState>, id: String, name: String, co
 #[tauri::command]
 pub fn delete_prompt(state: tauri::State<AppState>, id: String) -> Result<(), String> {
     state.db.lock().unwrap().delete_prompt_by_id(&id).map_err(|e| e.to_string())
+}
+
+// --- Conversation Branching ---
+
+#[tauri::command]
+pub fn fork_conversation(state: tauri::State<AppState>, conversation_id: String, message_id: String) -> Result<String, String> {
+    let db = state.db.lock().unwrap();
+    // Generate a title for the fork
+    let title = db.conn.query_row(
+        "SELECT title FROM conversations WHERE id = ?1",
+        params![conversation_id],
+        |row| row.get::<_, String>(0),
+    ).map(|t| format!("{} (fork)", t))
+    .unwrap_or_else(|_| "Forked conversation".to_string());
+
+    db.fork_conversation(&conversation_id, &message_id, &title).map_err(|e| e.to_string())
 }
 
 // --- Token Usage ---
