@@ -20,6 +20,13 @@
 
 ---
 
+<p align="center">
+  <img src="assets/LCD-demo.gif" alt="Linux Claude Desktop demo" width="700" />
+</p>
+<p align="center"><em>Streaming chat with syntax highlighting, markdown rendering, and artifacts</em></p>
+
+---
+
 ## Screenshots
 
 <p align="center">
