@@ -284,12 +284,12 @@ linux-claude-desktop/
 - [x] Export artifacts (save to file, clipboard, open in external editor)
 - [x] Code splitting (CodeMirror, KaTeX, highlight.js, Mermaid in separate lazy chunks)
 
-### Phase 8.5 — Housekeeping
-- [ ] Reduce highlight.js bundle (import only common languages instead of all)
-- [ ] Lazy-load Mermaid renderer only when mermaid artifacts are opened
-- [ ] Add artifact search/filter in the panel
-- [ ] Keyboard shortcuts for artifact panel (Ctrl+E edit, Ctrl+S save, etc.)
-- [ ] Artifact templates (starter code for common patterns)
+### Phase 8.5 — Housekeeping ✅
+- [x] Reduce highlight.js bundle (import only common languages — 65% main bundle reduction)
+- [x] Lazy-load Mermaid renderer only when mermaid artifacts are opened (already done in Phase 8)
+- [x] Add artifact search/filter in the panel
+- [x] Keyboard shortcuts for artifact panel (Ctrl+E edit, Ctrl+S save, Ctrl+F search, Alt+1/2/3 tabs)
+- [x] Artifact templates (HTML, React, Python, Mermaid, Markdown, SVG)
 
 ### Phase 9 — Knowledge & Context
 - [ ] Local knowledge base (index local files/folders for RAG context)

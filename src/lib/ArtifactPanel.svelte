@@ -17,8 +17,74 @@
   let iterateInput = $state("");
   let showIterateBox = $state(false);
   let showExportMenu = $state(false);
+  let searchQuery = $state("");
+  let showSearch = $state(false);
+  let showTemplateMenu = $state(false);
 
   let activeArtifact = $derived(artifacts.find(a => a.id === activeArtifactId));
+
+  let filteredArtifacts = $derived(
+    showSearch && searchQuery.trim()
+      ? artifacts.filter(a =>
+          a.title.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+          (a.language || "").toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+          (a.artifact_type || "").toLowerCase().includes(searchQuery.trim().toLowerCase())
+        )
+      : artifacts
+  );
+
+  const TEMPLATES = [
+    { name: "HTML Page", type: "code", language: "html", content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Untitled</title>\n  <style>\n    body { font-family: system-ui, sans-serif; margin: 2rem; }\n  </style>\n</head>\n<body>\n  <h1>Hello World</h1>\n</body>\n</html>` },
+    { name: "React Component", type: "code", language: "react", content: `function App() {\n  const [count, setCount] = React.useState(0);\n\n  return (\n    <div style={{ padding: "2rem", fontFamily: "system-ui" }}>\n      <h1>Counter: {count}</h1>\n      <button onClick={() => setCount(c => c + 1)}>Increment</button>\n    </div>\n  );\n}` },
+    { name: "Python Script", type: "code", language: "python", content: `#!/usr/bin/env python3\n"""Description of this script."""\n\n\ndef main():\n    print("Hello, world!")\n\n\nif __name__ == "__main__":\n    main()` },
+    { name: "Mermaid Flowchart", type: "code", language: "mermaid", content: `flowchart TD\n    A[Start] --> B{Decision}\n    B -->|Yes| C[Action 1]\n    B -->|No| D[Action 2]\n    C --> E[End]\n    D --> E` },
+    { name: "Markdown Document", type: "code", language: "markdown", content: `# Title\n\n## Overview\n\nDescribe the purpose here.\n\n## Details\n\n- Point one\n- Point two\n- Point three\n\n## Conclusion\n\nSummary here.` },
+    { name: "SVG Drawing", type: "code", language: "svg", content: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">\n  <circle cx="100" cy="100" r="80" fill="#4ecca3" opacity="0.8" />\n  <text x="100" y="108" text-anchor="middle" fill="white" font-size="24" font-family="system-ui">Hello</text>\n</svg>` },
+  ];
+
+  function handlePanelKeydown(e) {
+    // Only handle shortcuts when not typing in an input
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === "e") { e.preventDefault(); activeTab = "edit"; }
+      else if (e.key === "p") { /* let global palette handle it */ }
+      else if (e.key === "f") { e.preventDefault(); showSearch = !showSearch; if (!showSearch) searchQuery = ""; }
+      else if (e.key === "s") { e.preventDefault(); exportToFile(); }
+    }
+    // Alt+1/2/3 for mode tabs
+    if (e.altKey) {
+      if (e.key === "1") { e.preventDefault(); activeTab = "preview"; }
+      else if (e.key === "2") { e.preventDefault(); activeTab = "edit"; }
+      else if (e.key === "3") { e.preventDefault(); activeTab = "history"; }
+    }
+    if (e.key === "Escape") {
+      if (showSearch) { showSearch = false; searchQuery = ""; }
+      else if (showExportMenu) { showExportMenu = false; }
+      else if (showTemplateMenu) { showTemplateMenu = false; }
+      else if (showIterateBox) { showIterateBox = false; }
+    }
+  }
+
+  async function createFromTemplate(template) {
+    showTemplateMenu = false;
+    if (!conversationId) return;
+    try {
+      const id = crypto.randomUUID();
+      await invoke("create_artifact", {
+        id,
+        conversationId,
+        title: template.name,
+        artifactType: template.type,
+        language: template.language,
+        content: template.content,
+        source: "template",
+      });
+      onSelectArtifact(id);
+    } catch (e) {
+      console.error("Failed to create from template:", e);
+    }
+  }
 
   // Load content when active artifact changes
   $effect(() => {
@@ -160,11 +226,28 @@
   let rendererType = $derived(getRendererType(activeArtifact));
 </script>
 
-<div class="artifact-panel">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="artifact-panel" onkeydown={handlePanelKeydown}>
+  <!-- Search bar -->
+  {#if showSearch}
+    <div class="artifact-search-bar">
+      <input
+        class="artifact-search-input"
+        bind:value={searchQuery}
+        placeholder="Filter artifacts..."
+        autofocus
+        onkeydown={(e) => e.key === "Escape" && (() => { showSearch = false; searchQuery = ""; })()}
+      />
+      <button class="search-close" onclick={() => { showSearch = false; searchQuery = ""; }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  {/if}
+
   <!-- Tab bar for multiple artifacts -->
-  {#if artifacts.length > 1}
+  {#if filteredArtifacts.length > 1 || showSearch}
     <div class="artifact-tabs-bar">
-      {#each artifacts as art (art.id)}
+      {#each filteredArtifacts as art (art.id)}
         <button
           class="artifact-tab"
           class:active={art.id === activeArtifactId}
@@ -219,6 +302,31 @@
             <button onclick={exportToFile}>Save to file</button>
             <button onclick={copyToClipboard}>Copy to clipboard</button>
             <button onclick={openExternal}>Open in editor</button>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Search button -->
+      <button class="icon-btn" onclick={() => { showSearch = !showSearch; if (!showSearch) searchQuery = ""; }} title="Search artifacts (Ctrl+F)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+
+      <!-- Template menu -->
+      <div class="export-wrapper">
+        <button class="icon-btn" onclick={() => showTemplateMenu = !showTemplateMenu} title="New from template">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        {#if showTemplateMenu}
+          <div class="export-menu">
+            {#each TEMPLATES as template}
+              <button onclick={() => createFromTemplate(template)}>
+                {template.name}
+              </button>
+            {/each}
           </div>
         {/if}
       </div>
@@ -471,4 +579,32 @@
     overflow: hidden;
     min-height: 0;
   }
+
+  .artifact-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    flex-shrink: 0;
+  }
+  .artifact-search-input {
+    flex: 1;
+    padding: 4px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-primary);
+    outline: none;
+  }
+  .artifact-search-input:focus { border-color: var(--accent); }
+  .search-close {
+    color: var(--text-muted);
+    padding: 2px;
+    display: flex;
+    align-items: center;
+  }
+  .search-close:hover { color: var(--text-primary); }
 </style>

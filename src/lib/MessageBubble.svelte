@@ -1,6 +1,6 @@
 <script>
   import { marked } from "marked";
-  import hljs from "highlight.js";
+  import hljs from "./highlight.js";
   import katex from "katex";
   import "katex/dist/katex.min.css";
   import { tick } from "svelte";
