@@ -88,7 +88,12 @@
     }
   }
 
-  const PREVIEWABLE_LANGS = ["html", "svg"];
+  const ARTIFACT_LANGS = [
+    "html", "svg", "javascript", "js", "typescript", "ts", "jsx", "tsx",
+    "python", "py", "rust", "rs", "css", "json", "markdown", "md", "mermaid",
+    "react", "go", "java", "c", "cpp", "ruby", "php", "bash", "sh", "sql",
+    "yaml", "toml", "xml",
+  ];
 
   function detectLanguage(block) {
     const code = block.querySelector("code");
@@ -102,6 +107,8 @@
     if (text.startsWith("<svg")) return "svg";
     if (text.includes("<!DOCTYPE") || text.includes("<html")) return "html";
     if (text.startsWith("<") && text.endsWith(">") && text.includes("<div")) return "html";
+    if (/^(graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|flowchart)\b/.test(text)) return "mermaid";
+    if (/^import React|^export default function|^const \w+ = \(\) =>/.test(text)) return "react";
     return null;
   }
 
@@ -126,14 +133,15 @@
       block.style.position = "relative";
       block.appendChild(btn);
 
-      // Add preview button for previewable languages
+      // Add "Open as Artifact" button for substantial code blocks
       const lang = detectLanguage(block);
-      if (lang && PREVIEWABLE_LANGS.includes(lang) && onPreviewArtifact) {
+      const lineCount = codeText.split("\n").length;
+      if (lang && onPreviewArtifact && (ARTIFACT_LANGS.includes(lang) || lineCount >= 10)) {
         const previewBtn = document.createElement("button");
         previewBtn.className = "preview-btn";
-        previewBtn.textContent = "Preview";
+        previewBtn.textContent = "Artifact";
         previewBtn.addEventListener("click", () => {
-          onPreviewArtifact({ code: codeText, language: lang });
+          onPreviewArtifact({ code: codeText, language: lang || "text" });
         });
         block.appendChild(previewBtn);
       }

@@ -221,15 +221,23 @@ ubuntu-claude-desktop/
 - [x] Performance profiling and optimization
 - [x] Offline mode (queue messages when disconnected)
 
-### Phase 8 — Co-Work (Artifacts)
-- [ ] Persistent artifacts panel (side panel alongside chat)
-- [ ] Artifact types (Code, Markdown, Mermaid diagrams, HTML/SVG, React components)
-- [ ] Live editing with syntax highlighting
-- [ ] Iterate with Claude (send artifact state back for modification)
-- [ ] Multiple artifacts per conversation (tab-based management)
-- [ ] Artifact versioning (diff between versions, revert)
-- [ ] Artifact persistence (save to DB, restore on reopen)
-- [ ] Export artifacts (save to file, clipboard, open in external editor)
+### Phase 8 — Co-Work (Artifacts) ✅
+- [x] Persistent artifacts panel (side panel alongside chat)
+- [x] Artifact types (Code, Markdown, Mermaid diagrams, HTML/SVG, React components)
+- [x] Live editing with syntax highlighting (CodeMirror 6)
+- [x] Iterate with Claude (send artifact state back for modification)
+- [x] Multiple artifacts per conversation (tab-based management)
+- [x] Artifact versioning (diff between versions, revert)
+- [x] Artifact persistence (save to DB, restore on reopen)
+- [x] Export artifacts (save to file, clipboard, open in external editor)
+- [x] Code splitting (CodeMirror, KaTeX, highlight.js, Mermaid in separate lazy chunks)
+
+### Phase 8.5 — Housekeeping
+- [ ] Reduce highlight.js bundle (import only common languages instead of all)
+- [ ] Lazy-load Mermaid renderer only when mermaid artifacts are opened
+- [ ] Add artifact search/filter in the panel
+- [ ] Keyboard shortcuts for artifact panel (Ctrl+E edit, Ctrl+S save, etc.)
+- [ ] Artifact templates (starter code for common patterns)
 
 ## Tech Stack
 

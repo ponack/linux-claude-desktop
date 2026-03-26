@@ -6,7 +6,7 @@
   import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
   import { onMount, tick } from "svelte";
   import MessageBubble from "./MessageBubble.svelte";
-  import ArtifactPreview from "./ArtifactPreview.svelte";
+  import ArtifactPanel from "./ArtifactPanel.svelte";
 
   let { conversationId, onConversationCreated, deepLinkText = $bindable("") } = $props();
 
@@ -15,7 +15,8 @@
   let isStreaming = $state(false);
   let streamingMessageId = $state(null);
   let attachments = $state([]);
-  let activeArtifact = $state(null);
+  let artifacts = $state([]);
+  let activeArtifactId = $state(null);
   let projects = $state([]);
   let currentProjectId = $state(null);
   let messagesContainer;
@@ -47,7 +48,8 @@
   async function loadMessages() {
     if (!conversationId) {
       messages = [];
-      activeArtifact = null;
+      artifacts = [];
+      activeArtifactId = null;
       currentProjectId = null;
       tokenUsage = null;
       totalMessageCount = 0;
@@ -62,6 +64,7 @@
       const projId = await invoke("get_conversation_project", { conversationId });
       currentProjectId = projId || null;
       loadTokenUsage();
+      loadArtifacts();
     } catch (e) {
       console.error("Failed to load messages:", e);
     }
@@ -620,12 +623,58 @@ Be thorough in each step. Do not skip steps or combine them.`;
     }
   }
 
-  function handlePreviewArtifact(artifact) {
-    activeArtifact = artifact;
+  async function loadArtifacts() {
+    if (!conversationId) { artifacts = []; return; }
+    try {
+      artifacts = await invoke("get_artifacts", { conversationId });
+    } catch (e) { artifacts = []; }
+  }
+
+  async function handlePreviewArtifact(artifact) {
+    if (!conversationId) return;
+
+    // Detect artifact type
+    const lang = artifact.language || "text";
+    let artifactType = "code";
+    if (["html", "svg"].includes(lang)) artifactType = lang;
+    else if (lang === "mermaid") artifactType = "mermaid";
+    else if (["markdown", "md"].includes(lang)) artifactType = "markdown";
+    else if (["jsx", "tsx", "react"].includes(lang)) artifactType = "react";
+
+    // Derive a title from the first line or comment
+    const firstLine = artifact.code.split("\n")[0].replace(/^\/\/\s*|^#\s*|^<!--\s*|^\s*\*\s*/, "").trim();
+    const title = firstLine.length > 3 && firstLine.length < 60 ? firstLine : `${lang} artifact`;
+
+    try {
+      const id = await invoke("create_artifact", {
+        conversationId,
+        title,
+        artifactType,
+        language: lang,
+        content: artifact.code,
+        source: "claude",
+        messageId: null,
+      });
+      await loadArtifacts();
+      activeArtifactId = id;
+    } catch (e) {
+      console.error("Failed to create artifact:", e);
+    }
   }
 
   function closeArtifact() {
-    activeArtifact = null;
+    activeArtifactId = null;
+  }
+
+  function selectArtifact(id) {
+    activeArtifactId = id;
+  }
+
+  async function handleIterateArtifact(artifactId, currentContent, language, instruction) {
+    if (!conversationId || isStreaming) return;
+    const lang = language || "text";
+    inputText = `Here is the current artifact content:\n\`\`\`${lang}\n${currentContent}\n\`\`\`\n\nPlease modify it: ${instruction}`;
+    await sendMessage();
   }
 
   function handleKeydown(e) {
@@ -650,7 +699,7 @@ Be thorough in each step. Do not skip steps or combine them.`;
 </script>
 
 <div class="chat-container">
-  <div class="chat-main" class:has-artifact={activeArtifact}>
+  <div class="chat-main" class:has-artifact={activeArtifactId}>
     {#if conversationId && messages.length > 0}
       <div class="chat-toolbar">
         {#if activeModel}
@@ -827,8 +876,15 @@ Be thorough in each step. Do not skip steps or combine them.`;
   </div>
   </div>
 
-  {#if activeArtifact}
-    <ArtifactPreview artifact={activeArtifact} onClose={closeArtifact} />
+  {#if activeArtifactId}
+    <ArtifactPanel
+      {artifacts}
+      {activeArtifactId}
+      {conversationId}
+      onClose={closeArtifact}
+      onSelectArtifact={selectArtifact}
+      onIterateWithClaude={handleIterateArtifact}
+    />
   {/if}
 </div>
 

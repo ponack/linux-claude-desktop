@@ -14,4 +14,7 @@ export default defineConfig({
       ? { protocol: "ws", host, port: 1421 }
       : undefined,
   },
+  build: {
+    chunkSizeWarningLimit: 1500,
+  },
 });

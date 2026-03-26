@@ -176,6 +176,15 @@ pub fn run() {
             db::restore_database,
             db::get_database_path,
             db::get_database_size,
+            db::create_artifact,
+            db::get_artifacts,
+            db::get_artifact_content,
+            db::get_artifact_versions,
+            db::save_artifact_version,
+            db::update_artifact_title,
+            db::delete_artifact,
+            db::save_artifact_to_file,
+            db::open_artifact_external,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

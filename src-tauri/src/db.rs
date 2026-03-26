@@ -83,6 +83,29 @@ impl Database {
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS artifacts (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT 'Untitled',
+                artifact_type TEXT NOT NULL,
+                language TEXT,
+                current_version INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS artifact_versions (
+                id TEXT PRIMARY KEY,
+                artifact_id TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'claude',
+                message_id TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_artifact_versions_artifact ON artifact_versions(artifact_id, version);
+            CREATE INDEX IF NOT EXISTS idx_artifacts_conversation ON artifacts(conversation_id);
             PRAGMA foreign_keys = ON;"
         )?;
 
@@ -147,6 +170,33 @@ impl Database {
                  ALTER TABLE projects ADD COLUMN system_prompt TEXT;"
             ).ok();
         }
+
+        // Migration: create artifacts tables if missing
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS artifacts (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT 'Untitled',
+                artifact_type TEXT NOT NULL,
+                language TEXT,
+                current_version INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS artifact_versions (
+                id TEXT PRIMARY KEY,
+                artifact_id TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'claude',
+                message_id TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_artifact_versions_artifact ON artifact_versions(artifact_id, version);
+            CREATE INDEX IF NOT EXISTS idx_artifacts_conversation ON artifacts(conversation_id);"
+        ).ok();
 
         Ok(Self { conn })
     }
@@ -547,6 +597,98 @@ impl Database {
         })
     }
 
+    // --- Artifact methods ---
+
+    pub fn insert_artifact(&self, id: &str, conversation_id: &str, title: &str, artifact_type: &str, language: Option<&str>) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO artifacts (id, conversation_id, title, artifact_type, language, current_version, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7)",
+            params![id, conversation_id, title, artifact_type, language, &now, &now],
+        )?;
+        Ok(())
+    }
+
+    pub fn insert_artifact_version(&self, id: &str, artifact_id: &str, version: i64, content: &str, source: &str, message_id: Option<&str>) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO artifact_versions (id, artifact_id, version, content, source, message_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, artifact_id, version, content, source, message_id, &now],
+        )?;
+        self.conn.execute(
+            "UPDATE artifacts SET current_version = ?1, updated_at = ?2 WHERE id = ?3",
+            params![version, &now, artifact_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_artifacts_for_conversation(&self, conversation_id: &str) -> Result<Vec<Artifact>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, conversation_id, title, artifact_type, language, current_version, created_at, updated_at FROM artifacts WHERE conversation_id = ?1 ORDER BY created_at ASC"
+        )?;
+        let rows = stmt.query_map(params![conversation_id], |row| {
+            Ok(Artifact {
+                id: row.get(0)?,
+                conversation_id: row.get(1)?,
+                title: row.get(2)?,
+                artifact_type: row.get(3)?,
+                language: row.get(4)?,
+                current_version: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn get_artifact_latest_content(&self, artifact_id: &str) -> Result<Option<String>, rusqlite::Error> {
+        let current_version: i64 = self.conn.query_row(
+            "SELECT current_version FROM artifacts WHERE id = ?1",
+            params![artifact_id],
+            |row| row.get(0),
+        )?;
+        let mut stmt = self.conn.prepare(
+            "SELECT content FROM artifact_versions WHERE artifact_id = ?1 AND version = ?2"
+        )?;
+        let mut rows = stmt.query_map(params![artifact_id, current_version], |row| row.get::<_, String>(0))?;
+        match rows.next() {
+            Some(Ok(c)) => Ok(Some(c)),
+            _ => Ok(None),
+        }
+    }
+
+    pub fn list_artifact_versions(&self, artifact_id: &str) -> Result<Vec<ArtifactVersion>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, artifact_id, version, content, source, message_id, created_at FROM artifact_versions WHERE artifact_id = ?1 ORDER BY version ASC"
+        )?;
+        let rows = stmt.query_map(params![artifact_id], |row| {
+            Ok(ArtifactVersion {
+                id: row.get(0)?,
+                artifact_id: row.get(1)?,
+                version: row.get(2)?,
+                content: row.get(3)?,
+                source: row.get(4)?,
+                message_id: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn update_artifact_title(&self, id: &str, title: &str) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "UPDATE artifacts SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            params![title, &now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_artifact(&self, id: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute("DELETE FROM artifact_versions WHERE artifact_id = ?1", params![id])?;
+        self.conn.execute("DELETE FROM artifacts WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
     pub fn list_prompts(&self) -> Result<Vec<Prompt>, rusqlite::Error> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, content, created_at FROM prompts ORDER BY name ASC"
@@ -595,6 +737,29 @@ pub struct Project {
     pub api_key: Option<String>,
     pub model: Option<String>,
     pub system_prompt: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Artifact {
+    pub id: String,
+    pub conversation_id: String,
+    pub title: String,
+    pub artifact_type: String,
+    pub language: Option<String>,
+    pub current_version: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ArtifactVersion {
+    pub id: String,
+    pub artifact_id: String,
+    pub version: i64,
+    pub content: String,
+    pub source: String,
+    pub message_id: Option<String>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1083,4 +1248,98 @@ pub fn get_database_size(state: tauri::State<AppState>) -> Result<u64, String> {
     }
     let metadata = std::fs::metadata(&db_path).map_err(|e| e.to_string())?;
     Ok(metadata.len())
+}
+
+// --- Artifacts ---
+
+#[tauri::command]
+pub fn create_artifact(
+    state: tauri::State<AppState>,
+    conversation_id: String,
+    title: String,
+    artifact_type: String,
+    language: Option<String>,
+    content: String,
+    source: String,
+    message_id: Option<String>,
+) -> Result<String, String> {
+    let db = state.db.lock().unwrap();
+    let artifact_id = uuid::Uuid::new_v4().to_string();
+    let version_id = uuid::Uuid::new_v4().to_string();
+    db.insert_artifact(&artifact_id, &conversation_id, &title, &artifact_type, language.as_deref())
+        .map_err(|e| e.to_string())?;
+    db.insert_artifact_version(&version_id, &artifact_id, 1, &content, &source, message_id.as_deref())
+        .map_err(|e| e.to_string())?;
+    Ok(artifact_id)
+}
+
+#[tauri::command]
+pub fn get_artifacts(state: tauri::State<AppState>, conversation_id: String) -> Result<Vec<Artifact>, String> {
+    state.db.lock().unwrap().list_artifacts_for_conversation(&conversation_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_artifact_content(state: tauri::State<AppState>, artifact_id: String) -> Result<Option<String>, String> {
+    state.db.lock().unwrap().get_artifact_latest_content(&artifact_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_artifact_versions(state: tauri::State<AppState>, artifact_id: String) -> Result<Vec<ArtifactVersion>, String> {
+    state.db.lock().unwrap().list_artifact_versions(&artifact_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_artifact_version(
+    state: tauri::State<AppState>,
+    artifact_id: String,
+    content: String,
+    source: String,
+) -> Result<i64, String> {
+    let db = state.db.lock().unwrap();
+    // Get current version to determine next
+    let versions = db.list_artifact_versions(&artifact_id).map_err(|e| e.to_string())?;
+    let next_version = versions.iter().map(|v| v.version).max().unwrap_or(0) + 1;
+    let version_id = uuid::Uuid::new_v4().to_string();
+    db.insert_artifact_version(&version_id, &artifact_id, next_version, &content, &source, None)
+        .map_err(|e| e.to_string())?;
+    Ok(next_version)
+}
+
+#[tauri::command]
+pub fn update_artifact_title(state: tauri::State<AppState>, artifact_id: String, title: String) -> Result<(), String> {
+    state.db.lock().unwrap().update_artifact_title(&artifact_id, &title).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_artifact(state: tauri::State<AppState>, artifact_id: String) -> Result<(), String> {
+    state.db.lock().unwrap().delete_artifact(&artifact_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_artifact_to_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, &content).map_err(|e| format!("Failed to write file: {}", e))
+}
+
+#[tauri::command]
+pub fn open_artifact_external(content: String, language: String) -> Result<(), String> {
+    let ext = match language.as_str() {
+        "javascript" | "js" => "js",
+        "typescript" | "ts" => "ts",
+        "python" | "py" => "py",
+        "rust" | "rs" => "rs",
+        "html" => "html",
+        "css" => "css",
+        "json" => "json",
+        "markdown" | "md" => "md",
+        "svg" => "svg",
+        "mermaid" => "mmd",
+        _ => "txt",
+    };
+    let path = format!("/tmp/ucd-artifact-{}.{}", uuid::Uuid::new_v4(), ext);
+    std::fs::write(&path, &content).map_err(|e| format!("Failed to write temp file: {}", e))?;
+    std::process::Command::new("xdg-open")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| format!("Failed to open external editor: {}", e))?;
+    Ok(())
 }
