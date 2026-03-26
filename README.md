@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Ubuntu Claude Desktop" width="180" />
+  <img src="assets/logo.svg" alt="Linux Claude Desktop" width="180" />
 </p>
 
-<h1 align="center">Ubuntu Claude Desktop</h1>
+<h1 align="center">Linux Claude Desktop</h1>
 
 <p align="center">
   A lightweight, native Claude AI desktop client for Ubuntu/Linux built with Tauri v2 and Svelte 5.
@@ -48,7 +48,7 @@
 
 ## Why?
 
-Anthropic's official Claude Desktop app is available for macOS and Windows, but not Linux. Ubuntu Claude Desktop fills that gap with a native, lightweight alternative that uses the Anthropic API directly.
+Anthropic's official Claude Desktop app is available for macOS and Windows, but not Linux. Linux Claude Desktop fills that gap with a native, lightweight alternative that uses the Anthropic API directly.
 
 - **~10MB** binary (vs ~150MB for Electron-based alternatives)
 - **Native WebKitGTK** rendering (no bundled Chromium)
@@ -98,8 +98,8 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 
 ```bash
 # Clone the repo
-git clone https://github.com/ponack/ubuntu-claude-desktop.git
-cd ubuntu-claude-desktop
+git clone https://github.com/ponack/linux-claude-desktop.git
+cd linux-claude-desktop
 
 # Install dependencies
 npm install
@@ -118,10 +118,10 @@ On first launch:
 
 ## Install (Pre-built)
 
-Download the latest `.deb` from [Releases](https://github.com/ponack/ubuntu-claude-desktop/releases) and install:
+Download the latest `.deb` from [Releases](https://github.com/ponack/linux-claude-desktop/releases) and install:
 
 ```bash
-sudo dpkg -i ubuntu-claude-desktop_*.deb
+sudo dpkg -i linux-claude-desktop_*.deb
 ```
 
 ## Building from Source
@@ -135,7 +135,7 @@ This generates a `.deb` package in `src-tauri/target/release/bundle/deb/` that y
 ## Project Structure
 
 ```
-ubuntu-claude-desktop/
+linux-claude-desktop/
 ├── src/                          # Svelte 5 frontend
 │   ├── App.svelte                # Layout: sidebar + main area
 │   ├── lib/

@@ -13,7 +13,7 @@
 
 Instead, report vulnerabilities privately via one of these methods:
 
-1. **GitHub Security Advisories** (preferred): Go to the [Security tab](https://github.com/ponack/ubuntu-claude-desktop/security/advisories) and click "Report a vulnerability"
+1. **GitHub Security Advisories** (preferred): Go to the [Security tab](https://github.com/ponack/linux-claude-desktop/security/advisories) and click "Report a vulnerability"
 2. **Email**: Contact the maintainer directly through their GitHub profile
 
 ### What to include
@@ -32,7 +32,7 @@ Instead, report vulnerabilities privately via one of these methods:
 ## Security Considerations
 
 ### API Keys
-API keys are stored in a local SQLite database (`~/.local/share/com.ubuntu-claude-desktop.app/ucd.db`). The database relies on operating system file permissions for protection. Keys are never transmitted anywhere other than to the configured API provider.
+API keys are stored in a local SQLite database (`~/.local/share/com.linux-claude-desktop.app/ucd.db`). The database relies on operating system file permissions for protection. Keys are never transmitted anywhere other than to the configured API provider.
 
 ### Custom Commands
 The custom commands feature executes user-configured shell scripts. Only commands you configure yourself are executed — the app does not run arbitrary commands from external sources.

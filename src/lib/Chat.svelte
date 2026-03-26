@@ -750,8 +750,8 @@ Be thorough in each step. Do not skip steps or combine them.`;
     <div class="messages" bind:this={messagesContainer} role="log" aria-live="polite" aria-label="Chat messages">
       {#if messages.length === 0 && !conversationId}
         <div class="empty-state">
-          <img src="/assets/logo.svg" alt="Ubuntu Claude Desktop" class="empty-logo" />
-          <h2>Ubuntu Claude Desktop</h2>
+          <img src="/assets/logo.svg" alt="Linux Claude Desktop" class="empty-logo" />
+          <h2>Linux Claude Desktop</h2>
           <p>Start a conversation by typing a message below.</p>
         </div>
       {/if}

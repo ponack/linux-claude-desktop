@@ -3,7 +3,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
 
-  let { activeConversationId, onSelect, onNewChat, openSettings, refreshKey } = $props();
+  let { activeConversationId, onSelect, onNewChat, openSettings, refreshKey, collapsed = false } = $props();
 
   let conversations = $state([]);
   let searchQuery = $state("");
@@ -147,54 +147,67 @@
   }
 </script>
 
-<aside class="sidebar" aria-label="Conversations sidebar">
+<aside class="sidebar" class:collapsed aria-label="Conversations sidebar">
   <div class="sidebar-header">
     <div class="sidebar-brand">
-      <img src="/assets/logo.svg" alt="Ubuntu Claude Desktop" class="sidebar-logo" />
-      <span class="sidebar-title">UCD</span>
+      <img src="/assets/logo.svg" alt="Linux Claude Desktop" class="sidebar-logo" />
+      {#if !collapsed}
+        <span class="sidebar-title">LCD</span>
+      {/if}
     </div>
-    <button class="new-chat-btn" onclick={onNewChat} aria-label="Start new chat">
-      + New Chat
-    </button>
+    {#if !collapsed}
+      <button class="new-chat-btn" onclick={onNewChat} aria-label="Start new chat">
+        + New Chat
+      </button>
+    {/if}
   </div>
 
-  <div class="search-box">
-    <input
-      type="text"
-      bind:value={searchQuery}
-      placeholder="Search conversations..."
-      aria-label="Search conversations"
-    />
-  </div>
+  {#if !collapsed}
+    <div class="search-box">
+      <input
+        type="text"
+        bind:value={searchQuery}
+        placeholder="Search conversations..."
+        aria-label="Search conversations"
+      />
+    </div>
 
-  <div class="conversations-list" role="list" aria-label="Conversation history">
-    {#each filteredConversations as conv (conv.id)}
-      <div
-        class="conversation-item"
-        class:active={activeConversationId === conv.id}
-        role="button"
-        tabindex="0"
-        onclick={() => onSelect(conv.id)}
-        onkeydown={(e) => e.key === 'Enter' && onSelect(conv.id)}
-        aria-label="Open conversation: {conv.title}"
-        aria-current={activeConversationId === conv.id ? "true" : undefined}
-      >
-        <span class="conv-title">{conv.title}</span>
-        <button class="delete-btn" onclick={(e) => handleDelete(e, conv.id)} aria-label="Delete conversation: {conv.title}">
-          ×
-        </button>
-      </div>
-    {/each}
-  </div>
+    <div class="conversations-list" role="list" aria-label="Conversation history">
+      {#each filteredConversations as conv (conv.id)}
+        <div
+          class="conversation-item"
+          class:active={activeConversationId === conv.id}
+          role="button"
+          tabindex="0"
+          onclick={() => onSelect(conv.id)}
+          onkeydown={(e) => e.key === 'Enter' && onSelect(conv.id)}
+          aria-label="Open conversation: {conv.title}"
+          aria-current={activeConversationId === conv.id ? "true" : undefined}
+        >
+          <span class="conv-title">{conv.title}</span>
+          <button class="delete-btn" onclick={(e) => handleDelete(e, conv.id)} aria-label="Delete conversation: {conv.title}">
+            ×
+          </button>
+        </div>
+      {/each}
+    </div>
+  {/if}
 
   <div class="sidebar-footer">
-    {#if updateInfo}
+    {#if !collapsed && updateInfo}
       <button class="update-banner" onclick={openUpdateDialog} aria-label="Update available: version {updateInfo.latest_version}">
         Update available: v{updateInfo.latest_version}
       </button>
     {/if}
     <button class="settings-btn" onclick={openSettings} aria-label="Open settings">
-      Settings
+      {#if collapsed}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      {:else}
+        Settings
+      {/if}
     </button>
   </div>
 </aside>
@@ -284,6 +297,29 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    transition: width 0.2s ease, min-width 0.2s ease;
+  }
+
+  .sidebar.collapsed {
+    width: 56px;
+    min-width: 56px;
+  }
+
+  .sidebar.collapsed .sidebar-header {
+    align-items: center;
+  }
+
+  .sidebar.collapsed .sidebar-footer {
+    align-items: center;
+  }
+
+  .sidebar.collapsed .settings-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .sidebar-header {

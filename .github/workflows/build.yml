@@ -42,13 +42,13 @@ jobs:
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ubuntu-claude-desktop-beta-${{ github.sha }}
+          name: linux-claude-desktop-beta-${{ github.sha }}
           path: src-tauri/target/release/bundle/deb/*.deb
           retention-days: 14
 
       - name: Upload .rpm artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ubuntu-claude-desktop-beta-rpm-${{ github.sha }}
+          name: linux-claude-desktop-beta-rpm-${{ github.sha }}
           path: src-tauri/target/release/bundle/rpm/*.rpm
           retention-days: 14

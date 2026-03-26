@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegoodthings/tauri-schema/main/tauri.conf.schema.json",
-  "productName": "Ubuntu Claude Desktop",
+  "productName": "Linux Claude Desktop",
   "version": "0.7.1",
-  "identifier": "com.ubuntu-claude-desktop.app",
+  "identifier": "com.linux-claude-desktop.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Ubuntu Claude Desktop",
+        "title": "Linux Claude Desktop",
         "width": 900,
         "height": 700,
         "resizable": true,

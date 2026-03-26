@@ -176,6 +176,7 @@
     {onNewChat}
     {openSettings}
     refreshKey={sidebarRefresh}
+    collapsed={currentView === "settings"}
   />
   <main class="main-content">
     {#if currentView === "settings"}

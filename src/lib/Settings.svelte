@@ -773,7 +773,7 @@
     <!-- ABOUT -->
     {:else if activeSection === "about"}
       <div class="section">
-        <h3>About Ubuntu Claude Desktop</h3>
+        <h3>About Linux Claude Desktop</h3>
         <div class="card about-card">
           <div class="about-row">
             <span class="about-label">Version</span>

@@ -48,7 +48,7 @@ impl McpConnection {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
             "clientInfo": {
-                "name": "ubuntu-claude-desktop",
+                "name": "linux-claude-desktop",
                 "version": env!("CARGO_PKG_VERSION")
             }
         }))?;

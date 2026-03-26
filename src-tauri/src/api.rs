@@ -902,7 +902,7 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
     let client = reqwest::Client::new();
     let resp = client
         .get(GITHUB_RELEASES_URL)
-        .header("User-Agent", "ubuntu-claude-desktop")
+        .header("User-Agent", "linux-claude-desktop")
         .send()
         .await
         .map_err(|e| format!("Failed to check for updates: {}", e))?;
@@ -959,7 +959,7 @@ pub async fn download_update(app: tauri::AppHandle, url: String) -> Result<Strin
     let client = reqwest::Client::new();
     let resp = client
         .get(&url)
-        .header("User-Agent", "ubuntu-claude-desktop")
+        .header("User-Agent", "linux-claude-desktop")
         .send()
         .await
         .map_err(|e| format!("Download failed: {}", e))?;

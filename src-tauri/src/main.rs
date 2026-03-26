@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    ubuntu_claude_desktop_lib::run()
+    linux_claude_desktop_lib::run()
 }

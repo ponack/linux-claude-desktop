@@ -3,12 +3,12 @@ use zbus::{connection, interface};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub struct UcdDbusService {
+pub struct LcdDbusService {
     app: Arc<Mutex<AppHandle>>,
 }
 
-#[interface(name = "com.ubuntu_claude_desktop.App")]
-impl UcdDbusService {
+#[interface(name = "com.linux_claude_desktop.App")]
+impl LcdDbusService {
     /// Show the main window
     async fn show(&self) {
         let app = self.app.lock().await;
@@ -44,15 +44,15 @@ impl UcdDbusService {
 }
 
 pub async fn start_dbus_service(app: AppHandle) {
-    let service = UcdDbusService {
+    let service = LcdDbusService {
         app: Arc::new(Mutex::new(app)),
     };
 
     match connection::Builder::session()
         .expect("Failed to create DBus session builder")
-        .name("com.ubuntu_claude_desktop.App")
+        .name("com.linux_claude_desktop.App")
         .expect("Failed to set DBus name")
-        .serve_at("/com/ubuntu_claude_desktop/App", service)
+        .serve_at("/com/linux_claude_desktop/App", service)
         .expect("Failed to serve DBus interface")
         .build()
         .await

@@ -24,9 +24,16 @@ pub struct Database {
 
 impl Database {
     pub fn new() -> Result<Self, rusqlite::Error> {
-        let data_dir = dirs::data_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("ubuntu-claude-desktop");
+        let base = dirs::data_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        let old_dir = base.join("ubuntu-claude-desktop");
+        let data_dir = base.join("linux-claude-desktop");
+
+        // Migrate data from old name if it exists and new doesn't
+        if old_dir.exists() && !data_dir.exists() {
+            std::fs::rename(&old_dir, &data_dir).ok();
+        }
+
         std::fs::create_dir_all(&data_dir).ok();
 
         let db_path = data_dir.join("claude-desktop.db");
@@ -1220,7 +1227,7 @@ pub fn restore_database(state: tauri::State<AppState>, source: String) -> Result
     let test_conn = rusqlite::Connection::open(&source)
         .map_err(|e| format!("Invalid database file: {}", e))?;
     test_conn.query_row("SELECT COUNT(*) FROM conversations", [], |_| Ok(()))
-        .map_err(|_| "Invalid UCD database: missing conversations table".to_string())?;
+        .map_err(|_| "Invalid LCD database: missing conversations table".to_string())?;
     drop(test_conn);
 
     let db = state.db.lock().unwrap();
