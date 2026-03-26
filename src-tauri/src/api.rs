@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tauri::{Emitter, Manager};
 
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
-const GITHUB_RELEASES_URL: &str = "https://api.github.com/repos/ponack/ubuntu-claude-desktop/releases/latest";
+const GITHUB_RELEASES_URL: &str = "https://api.github.com/repos/ponack/linux-claude-desktop/releases/latest";
 
 static STOP_FLAG: AtomicBool = AtomicBool::new(false);
 

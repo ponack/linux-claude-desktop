@@ -789,8 +789,8 @@
           </div>
           <div class="about-row">
             <span class="about-label">Source Code</span>
-            <a href="https://github.com/ponack/ubuntu-claude-desktop" target="_blank" rel="noopener noreferrer" class="about-link">
-              github.com/ponack/ubuntu-claude-desktop
+            <a href="https://github.com/ponack/linux-claude-desktop" target="_blank" rel="noopener noreferrer" class="about-link">
+              github.com/ponack/linux-claude-desktop
             </a>
           </div>
         </div>
