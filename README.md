@@ -9,10 +9,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/ponack/linux-claude-desktop/releases/latest"><img src="https://img.shields.io/github/v/release/ponack/linux-claude-desktop?label=latest&logo=github" alt="Latest Release" /></a>
+  <a href="https://github.com/ponack/linux-claude-desktop/releases"><img src="https://img.shields.io/github/downloads/ponack/linux-claude-desktop/total?logo=github" alt="Downloads" /></a>
+  <a href="https://github.com/ponack/linux-claude-desktop/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/ponack/linux-claude-desktop/build.yml?logo=github&label=build" alt="Build Status" /></a>
   <img src="https://img.shields.io/badge/platform-Linux-blue?logo=linux" alt="Platform" />
   <img src="https://img.shields.io/badge/built_with-Tauri_v2-orange?logo=tauri" alt="Tauri" />
   <img src="https://img.shields.io/badge/frontend-Svelte_5-red?logo=svelte" alt="Svelte" />
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ponack/linux-claude-desktop" alt="License" /></a>
 </p>
 
 ---
@@ -50,10 +53,29 @@
 
 Anthropic's official Claude Desktop app is available for macOS and Windows, but not Linux. Linux Claude Desktop fills that gap with a native, lightweight alternative that uses the Anthropic API directly.
 
-- **~10MB** binary (vs ~150MB for Electron-based alternatives)
+- **~10MB** binary (vs ~150-500MB for Electron-based alternatives)
 - **Native WebKitGTK** rendering (no bundled Chromium)
-- **Low memory footprint** thanks to Tauri's Rust backend
+- **Low memory footprint** (~30-40MB idle vs ~200-300MB for Electron apps)
+- **Multi-provider** — Anthropic, OpenAI, Ollama (local models)
 - **Your API key, your data** — everything stays local on your machine
+
+## How Does It Compare?
+
+| | LCD | Claude Desktop (Official) | claude-desktop-debian | Chatbox AI | Jan |
+|---|---|---|---|---|---|
+| **Technology** | Tauri v2 + Rust | Electron | Electron (repackaged) | Electron | Electron |
+| **Binary size** | ~10 MB | ~200 MB | ~200 MB | ~100 MB | ~500 MB |
+| **RAM (idle)** | ~30-40 MB | ~200+ MB | ~200+ MB | ~150+ MB | ~300+ MB |
+| **Linux native** | Yes | No | Unofficial port | Yes | Yes |
+| **Multi-provider** | Anthropic, OpenAI, Ollama | Claude only | Claude only | Multi | Multi |
+| **MCP support** | Yes | Yes | Yes | No | Yes |
+| **Artifacts** | Yes (6 renderers) | Yes | Yes | No | No |
+| **Open source** | MIT | No | Scripts only | GPLv3 | Apache 2.0 |
+| **Offline mode** | Yes (queue + retry) | No | No | No | Yes (local models) |
+| **Custom themes** | Yes (CSS + presets) | No | No | No | No |
+| **Desktop integration** | Global hotkey, tray, DBus, URI handler | Tray | Tray | Tray | Tray |
+
+**LCD is purpose-built for Linux** — not an Electron wrapper or a repackaged Windows app. It uses your system's WebKitGTK for rendering, keeping the binary small and memory usage low.
 
 ## Features
 
@@ -84,53 +106,76 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 - Export conversations (Markdown/JSON)
 - Auto-update notifications
 
-## Prerequisites
+## Quick Start
+
+1. [Install](#install-pre-built) the app for your distro
+2. Launch **Linux Claude Desktop** from your application menu
+3. Open **Settings** and choose your provider (Anthropic, OpenAI, or Ollama)
+4. Enter your API key (or set Ollama URL for local models)
+5. Start chatting
+
+## Install (Pre-built)
+
+Download the latest packages from [Releases](https://github.com/ponack/linux-claude-desktop/releases).
+
+### Ubuntu / Debian
+
+```bash
+sudo dpkg -i Linux.Claude.Desktop_*.deb
+```
+
+### Fedora / RHEL / openSUSE
+
+```bash
+sudo rpm -i Linux.Claude.Desktop-*.rpm
+```
+
+### Arch Linux (from source)
+
+```bash
+# Install dependencies
+sudo pacman -S webkit2gtk-4.1 gtk3 libayatana-appindicator openssl
+
+# Clone and build
+git clone https://github.com/ponack/linux-claude-desktop.git
+cd linux-claude-desktop
+npm install
+npm run tauri build
+
+# Install the generated .deb or run the binary directly
+./src-tauri/target/release/linux-claude-desktop
+```
+
+> **Want an AUR package or Flatpak?** Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Verify Installation
+
+After installing, launch from your application menu or run:
+
+```bash
+linux-claude-desktop
+```
+
+## Building from Source
+
+### Prerequisites
 
 - **Node.js** >= 18
 - **Rust** (install via [rustup](https://rustup.rs/))
-- **System libraries:**
+- **System libraries** (see distro-specific commands above, or for Ubuntu/Debian):
 
 ```bash
 sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libssl-dev
 ```
 
-## Getting Started
+### Build
 
 ```bash
-# Clone the repo
-git clone https://github.com/ponack/linux-claude-desktop.git
-cd linux-claude-desktop
-
-# Install dependencies
 npm install
-
-# Run in development mode (first build takes a few minutes)
-source "$HOME/.cargo/env"  # if Rust was just installed
-npm run tauri dev
-```
-
-On first launch:
-1. Click **Settings** in the sidebar
-2. Choose your **Provider** (Anthropic, OpenAI, or Ollama)
-3. Enter your API key (or set Ollama URL for local models)
-4. Choose your preferred model
-5. Save, and start chatting
-
-## Install (Pre-built)
-
-Download the latest `.deb` from [Releases](https://github.com/ponack/linux-claude-desktop/releases) and install:
-
-```bash
-sudo dpkg -i linux-claude-desktop_*.deb
-```
-
-## Building from Source
-
-```bash
 npm run tauri build
 ```
 
-This generates a `.deb` package in `src-tauri/target/release/bundle/deb/` that you can install with `dpkg -i`.
+This generates `.deb` and `.rpm` packages in `src-tauri/target/release/bundle/`.
 
 ## Project Structure
 
