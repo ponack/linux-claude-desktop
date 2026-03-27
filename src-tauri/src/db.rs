@@ -1534,6 +1534,59 @@ pub fn set_high_contrast(state: tauri::State<AppState>, enabled: bool) -> Result
 }
 
 #[tauri::command]
+pub fn get_tts_enabled(state: tauri::State<AppState>) -> Result<bool, String> {
+    let v = state.db.lock().unwrap()
+        .get_setting("tts_enabled").map_err(|e| e.to_string())?.unwrap_or_default();
+    Ok(v == "true")
+}
+
+#[tauri::command]
+pub fn set_tts_enabled(state: tauri::State<AppState>, enabled: bool) -> Result<(), String> {
+    state.db.lock().unwrap()
+        .set_setting("tts_enabled", if enabled { "true" } else { "false" })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_tts_rate(state: tauri::State<AppState>) -> Result<i32, String> {
+    let v = state.db.lock().unwrap()
+        .get_setting("tts_rate").map_err(|e| e.to_string())?
+        .unwrap_or_else(|| "100".to_string());
+    Ok(v.parse().unwrap_or(100))
+}
+
+#[tauri::command]
+pub fn set_tts_rate(state: tauri::State<AppState>, rate: i32) -> Result<(), String> {
+    state.db.lock().unwrap().set_setting("tts_rate", &rate.to_string()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_stt_enabled(state: tauri::State<AppState>) -> Result<bool, String> {
+    let v = state.db.lock().unwrap()
+        .get_setting("stt_enabled").map_err(|e| e.to_string())?.unwrap_or_default();
+    Ok(v == "true")
+}
+
+#[tauri::command]
+pub fn set_stt_enabled(state: tauri::State<AppState>, enabled: bool) -> Result<(), String> {
+    state.db.lock().unwrap()
+        .set_setting("stt_enabled", if enabled { "true" } else { "false" })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_whisper_model_path(state: tauri::State<AppState>) -> Result<String, String> {
+    state.db.lock().unwrap()
+        .get_setting("whisper_model_path").map_err(|e| e.to_string())
+        .map(|v| v.unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn set_whisper_model_path(state: tauri::State<AppState>, path: String) -> Result<(), String> {
+    state.db.lock().unwrap().set_setting("whisper_model_path", &path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn get_system_prompt(state: tauri::State<AppState>) -> Result<Option<String>, String> {
     state.db.lock().unwrap().get_setting("system_prompt").map_err(|e| e.to_string())
 }

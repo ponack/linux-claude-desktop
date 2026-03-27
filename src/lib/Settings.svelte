@@ -43,6 +43,14 @@
   let reduceMotion = $state(false);
   let highContrast = $state(false);
 
+  // Voice settings
+  let ttsEnabled = $state(false);
+  let ttsRate = $state(100);
+  let sttEnabled = $state(false);
+  let whisperModelPath = $state("");
+  let ttsAvailable = $state(false);
+  let sttAvailable = $state(false);
+
   // Status
   let saveStatus = $state(""); // "", "saving", "saved", "error"
   let saveError = $state("");
@@ -198,6 +206,12 @@
         fontSize = await invoke("get_font_size");
         reduceMotion = await invoke("get_reduce_motion");
         highContrast = await invoke("get_high_contrast");
+        ttsEnabled = await invoke("get_tts_enabled");
+        ttsRate = await invoke("get_tts_rate");
+        sttEnabled = await invoke("get_stt_enabled");
+        whisperModelPath = await invoke("get_whisper_model_path");
+        ttsAvailable = await invoke("check_tts_available");
+        sttAvailable = await invoke("check_stt_available");
       } catch (_) {}
 
       try {
@@ -566,6 +580,11 @@
       document.documentElement.setAttribute("data-theme", t);
     }
   }
+
+  async function saveTtsEnabled() { await invoke("set_tts_enabled", { enabled: ttsEnabled }); }
+  async function saveTtsRate() { await invoke("set_tts_rate", { rate: ttsRate }); }
+  async function saveSttEnabled() { await invoke("set_stt_enabled", { enabled: sttEnabled }); }
+  async function saveWhisperModelPath() { await invoke("set_whisper_model_path", { path: whisperModelPath }); }
 
   function formatInterval(ms) {
     if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
@@ -1356,6 +1375,59 @@
               <input type="checkbox" bind:checked={highContrast} onchange={saveHighContrast} aria-label="High contrast mode" />
               <span class="toggle-slider"></span>
             </label>
+          </div>
+        </div>
+
+        <h3>Text-to-Speech (TTS)</h3>
+        <div class="card">
+          {#if !ttsAvailable}
+            <p class="hint" style="color: var(--text-muted);">TTS unavailable — install <code>spd-say</code> or <code>espeak-ng</code>.</p>
+          {/if}
+          <div class="field toggle-field">
+            <div class="toggle-label">
+              <span>Read responses aloud</span>
+              <p class="hint">Auto-speaks each assistant response when streaming completes.</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" bind:checked={ttsEnabled} onchange={saveTtsEnabled} disabled={!ttsAvailable} aria-label="Read responses aloud" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="field">
+            <label for="tts-rate">Speech Rate</label>
+            <div class="font-size-row">
+              <input id="tts-rate" type="range" min="0" max="200" step="10"
+                bind:value={ttsRate} onchange={saveTtsRate} disabled={!ttsAvailable}
+                aria-valuetext="{ttsRate}%" />
+              <span class="font-size-value">{ttsRate}%</span>
+            </div>
+            <p class="hint">0 = slowest, 100 = normal, 200 = fastest.</p>
+          </div>
+        </div>
+
+        <h3>Speech-to-Text (STT)</h3>
+        <div class="card">
+          {#if !sttAvailable}
+            <p class="hint" style="color: var(--text-muted);">STT unavailable — install <code>arecord</code> (alsa-utils) and <a href="https://github.com/ggerganov/whisper.cpp" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">whisper.cpp</a>.</p>
+          {/if}
+          <div class="field toggle-field">
+            <div class="toggle-label">
+              <span>Enable microphone input</span>
+              <p class="hint">Shows a mic button in the chat input area.</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" bind:checked={sttEnabled} onchange={saveSttEnabled} disabled={!sttAvailable} aria-label="Enable microphone input" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="field">
+            <label for="whisper-path">Whisper model path</label>
+            <input id="whisper-path" type="text" bind:value={whisperModelPath}
+              onblur={saveWhisperModelPath}
+              placeholder="/path/to/ggml-base.en.bin"
+              disabled={!sttAvailable}
+              style="width: 100%;" />
+            <p class="hint">Path to a whisper.cpp GGML model file. Download from <a href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">HuggingFace</a>.</p>
           </div>
         </div>
       </div>
