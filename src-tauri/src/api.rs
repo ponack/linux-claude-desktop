@@ -126,6 +126,8 @@ fn resolve_provider(state: &AppState, project_id: Option<&str>) -> Result<Resolv
                 api_key,
                 base_url: "https://api.anthropic.com".to_string(),
                 model,
+                api_format: "anthropic".to_string(),
+                endpoint_id: None,
             })
         }
         ProviderType::OpenAI => {
@@ -144,6 +146,8 @@ fn resolve_provider(state: &AppState, project_id: Option<&str>) -> Result<Resolv
                 api_key,
                 base_url,
                 model,
+                api_format: "openai".to_string(),
+                endpoint_id: None,
             })
         }
         ProviderType::Ollama => {
@@ -158,6 +162,28 @@ fn resolve_provider(state: &AppState, project_id: Option<&str>) -> Result<Resolv
                 api_key: String::new(),
                 base_url,
                 model,
+                api_format: "openai".to_string(),
+                endpoint_id: None,
+            })
+        }
+        ProviderType::Custom => {
+            // Custom endpoint: look up endpoint_id from settings
+            let endpoint_id = db.get_setting("custom_endpoint_id").map_err(|e| e.to_string())?
+                .ok_or_else(|| "No custom endpoint selected. Configure one in Settings.".to_string())?;
+            let endpoint = db.get_custom_endpoint(&endpoint_id)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| "Custom endpoint not found.".to_string())?;
+            let model = project.as_ref()
+                .and_then(|p| p.model.clone())
+                .or_else(|| db.get_setting("model").ok().flatten())
+                .unwrap_or_else(|| endpoint.default_model.clone());
+            Ok(ResolvedProvider {
+                provider_type: ProviderType::Custom,
+                api_key: endpoint.api_key,
+                base_url: endpoint.base_url,
+                model,
+                api_format: endpoint.api_format,
+                endpoint_id: Some(endpoint.id),
             })
         }
     }
@@ -297,7 +323,7 @@ pub async fn send_message(
     let assistant_msg_id_clone = assistant_msg_id.clone();
     let app_clone = app.clone();
 
-    let mcp_configs: Vec<crate::mcp::McpServerConfig> = if provider.provider_type == ProviderType::Anthropic {
+    let mcp_configs: Vec<crate::mcp::McpServerConfig> = if provider.api_format == "anthropic" {
         let db = state.db.lock().unwrap();
         db.get_setting("mcp_servers")
             .ok()
@@ -320,13 +346,10 @@ pub async fn send_message(
     tauri::async_runtime::spawn(async move {
         let (provider, messages, conversation_id, system_prompt, mcp_configs) = state_inner.as_ref();
 
-        match &provider.provider_type {
-            ProviderType::Anthropic => {
-                stream_anthropic(&app_clone, &msg_id, conversation_id, provider, messages, system_prompt, mcp_configs).await;
-            }
-            ProviderType::OpenAI | ProviderType::Ollama => {
-                stream_openai_compatible(&app_clone, &msg_id, conversation_id, provider, messages, system_prompt).await;
-            }
+        if provider.api_format == "anthropic" {
+            stream_anthropic(&app_clone, &msg_id, conversation_id, provider, messages, system_prompt, mcp_configs).await;
+        } else {
+            stream_openai_compatible(&app_clone, &msg_id, conversation_id, provider, messages, system_prompt).await;
         }
     });
 
@@ -830,8 +853,8 @@ pub async fn generate_title(
 
     let client = reqwest::Client::new();
 
-    let title = match provider.provider_type {
-        ProviderType::Anthropic => {
+    let title = if provider.api_format == "anthropic" {
+        {
             // Use Haiku for title generation — fast and cheap
             let title_model = if provider.model.contains("haiku") {
                 provider.model.clone()
@@ -862,7 +885,8 @@ pub async fn generate_title(
                 .trim_matches('"')
                 .to_string()
         }
-        ProviderType::OpenAI | ProviderType::Ollama => {
+    } else {
+        {
             let body = serde_json::json!({
                 "model": provider.model,
                 "max_tokens": 30,
@@ -1268,6 +1292,382 @@ pub async fn toggle_quickask(app: tauri::AppHandle) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
         win.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct ComparisonStreamEvent {
+    event: String,
+    content: String,
+    session_id: String,
+    response_id: String,
+    model: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct ComparisonUsageEvent {
+    session_id: String,
+    response_id: String,
+    input_tokens: i64,
+    output_tokens: i64,
+    model: String,
+    latency_ms: i64,
+    estimated_cost: f64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ComparisonTarget {
+    provider: String,   // "anthropic", "openai", "ollama", "custom"
+    model: String,
+    endpoint_id: Option<String>,
+}
+
+/// Resolve a specific provider from a ComparisonTarget (not from settings)
+fn resolve_comparison_provider(state: &AppState, target: &ComparisonTarget) -> Result<ResolvedProvider, String> {
+    let db = state.db.lock().unwrap();
+    let provider_type = ProviderType::from_str(&target.provider);
+
+    match provider_type {
+        ProviderType::Anthropic => {
+            let api_key = db.get_setting("api_key").map_err(|e| e.to_string())?
+                .ok_or_else(|| "Anthropic API key not set".to_string())?;
+            Ok(ResolvedProvider {
+                provider_type: ProviderType::Anthropic,
+                api_key,
+                base_url: "https://api.anthropic.com".to_string(),
+                model: target.model.clone(),
+                api_format: "anthropic".to_string(),
+                endpoint_id: None,
+            })
+        }
+        ProviderType::OpenAI => {
+            let api_key = db.get_setting("openai_api_key").map_err(|e| e.to_string())?
+                .ok_or_else(|| "OpenAI API key not set".to_string())?;
+            let base_url = db.get_setting("openai_base_url").map_err(|e| e.to_string())?
+                .unwrap_or_else(|| "https://api.openai.com".to_string());
+            Ok(ResolvedProvider {
+                provider_type: ProviderType::OpenAI,
+                api_key,
+                base_url,
+                model: target.model.clone(),
+                api_format: "openai".to_string(),
+                endpoint_id: None,
+            })
+        }
+        ProviderType::Ollama => {
+            let base_url = db.get_setting("ollama_base_url").map_err(|e| e.to_string())?
+                .unwrap_or_else(|| "http://localhost:11434".to_string());
+            Ok(ResolvedProvider {
+                provider_type: ProviderType::Ollama,
+                api_key: String::new(),
+                base_url,
+                model: target.model.clone(),
+                api_format: "openai".to_string(),
+                endpoint_id: None,
+            })
+        }
+        ProviderType::Custom => {
+            let endpoint_id = target.endpoint_id.as_ref()
+                .ok_or_else(|| "Custom endpoint ID required".to_string())?;
+            let endpoint = db.get_custom_endpoint(endpoint_id)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| "Custom endpoint not found".to_string())?;
+            Ok(ResolvedProvider {
+                provider_type: ProviderType::Custom,
+                api_key: endpoint.api_key,
+                base_url: endpoint.base_url,
+                model: if target.model.is_empty() { endpoint.default_model } else { target.model.clone() },
+                api_format: endpoint.api_format,
+                endpoint_id: Some(endpoint.id),
+            })
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn send_comparison(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    prompt: String,
+    targets: Vec<ComparisonTarget>,
+    system_prompt: Option<String>,
+) -> Result<String, String> {
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // Create comparison session in DB
+    {
+        let db = state.db.lock().unwrap();
+        db.create_comparison_session(&session_id, &prompt, &now)
+            .map_err(|e| e.to_string())?;
+    }
+
+    // Resolve all providers before spawning tasks
+    let mut resolved: Vec<(String, ResolvedProvider)> = Vec::new();
+    for target in &targets {
+        let response_id = uuid::Uuid::new_v4().to_string();
+        let provider = resolve_comparison_provider(&state, target)?;
+        // Create comparison response row
+        {
+            let db = state.db.lock().unwrap();
+            db.create_comparison_response(&response_id, &session_id, &target.provider, &provider.model, &now)
+                .map_err(|e| e.to_string())?;
+        }
+        resolved.push((response_id, provider));
+    }
+
+    // Spawn parallel streaming tasks
+    for (response_id, provider) in resolved {
+        let app_clone = app.clone();
+        let session_id = session_id.clone();
+        let prompt = prompt.clone();
+        let system_prompt = system_prompt.clone();
+
+        tauri::async_runtime::spawn(async move {
+            let start = std::time::Instant::now();
+            let messages = vec![ApiMessage {
+                role: "user".into(),
+                content: serde_json::json!(prompt),
+            }];
+
+            let client = reqwest::Client::new();
+            let mut full_content = String::new();
+            let mut total_input_tokens: i64 = 0;
+            let mut total_output_tokens: i64 = 0;
+
+            let result = if provider.api_format == "anthropic" {
+                stream_comparison_anthropic(
+                    &client, &app_clone, &session_id, &response_id, &provider,
+                    &messages, &system_prompt, &mut full_content,
+                    &mut total_input_tokens, &mut total_output_tokens,
+                ).await
+            } else {
+                stream_comparison_openai(
+                    &client, &app_clone, &session_id, &response_id, &provider,
+                    &messages, &system_prompt, &mut full_content,
+                    &mut total_input_tokens, &mut total_output_tokens,
+                ).await
+            };
+
+            let latency_ms = start.elapsed().as_millis() as i64;
+
+            // Calculate cost
+            let estimated_cost = {
+                let db_state = app_clone.state::<AppState>();
+                let db = db_state.db.lock().unwrap();
+                db.estimate_cost(&provider.model, total_input_tokens, total_output_tokens).unwrap_or(0.0)
+            };
+
+            // Update comparison response in DB
+            {
+                let db_state = app_clone.state::<AppState>();
+                let db = db_state.db.lock().unwrap();
+                let _ = db.update_comparison_response(
+                    &response_id, &full_content, total_input_tokens,
+                    total_output_tokens, latency_ms, estimated_cost,
+                );
+            }
+
+            let _ = app_clone.emit("comparison-usage", ComparisonUsageEvent {
+                session_id: session_id.clone(),
+                response_id: response_id.clone(),
+                input_tokens: total_input_tokens,
+                output_tokens: total_output_tokens,
+                model: provider.model.clone(),
+                latency_ms,
+                estimated_cost,
+            });
+
+            let _ = app_clone.emit("comparison-stream", ComparisonStreamEvent {
+                event: if result.is_ok() { "done" } else { "error" }.into(),
+                content: result.err().unwrap_or_default(),
+                session_id,
+                response_id,
+                model: provider.model,
+            });
+        });
+    }
+
+    Ok(session_id)
+}
+
+async fn stream_comparison_anthropic(
+    client: &reqwest::Client,
+    app: &tauri::AppHandle,
+    session_id: &str,
+    response_id: &str,
+    provider: &ResolvedProvider,
+    messages: &[ApiMessage],
+    system_prompt: &Option<String>,
+    full_content: &mut String,
+    total_input_tokens: &mut i64,
+    total_output_tokens: &mut i64,
+) -> Result<(), String> {
+    let mut body = serde_json::json!({
+        "model": provider.model,
+        "max_tokens": 8192,
+        "stream": true,
+        "messages": messages,
+    });
+    if let Some(sp) = system_prompt {
+        if !sp.trim().is_empty() {
+            body["system"] = serde_json::json!(sp);
+        }
+    }
+
+    let resp = client
+        .post(format!("{}/v1/messages", provider.base_url.trim_end_matches('/')))
+        .header("x-api-key", &provider.api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        let err = format!("API error {}", resp.status());
+        return Err(err);
+    }
+
+    let mut stream = resp.bytes_stream();
+    let mut buffer = String::new();
+
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.map_err(|e| e.to_string())?;
+        buffer.push_str(&String::from_utf8_lossy(&bytes));
+
+        while let Some(pos) = buffer.find('\n') {
+            let line = buffer[..pos].trim().to_string();
+            buffer = buffer[pos + 1..].to_string();
+
+            if line.starts_with("data: ") {
+                let data = &line[6..];
+                if data == "[DONE]" { continue; }
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
+                    let event_type = parsed.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                    match event_type {
+                        "message_start" => {
+                            if let Some(usage) = parsed.get("message").and_then(|m| m.get("usage")) {
+                                if let Some(it) = usage.get("input_tokens").and_then(|v| v.as_i64()) {
+                                    *total_input_tokens += it;
+                                }
+                            }
+                        }
+                        "content_block_delta" => {
+                            if let Some(delta) = parsed.get("delta") {
+                                if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
+                                    full_content.push_str(text);
+                                    let _ = app.emit("comparison-stream", ComparisonStreamEvent {
+                                        event: "delta".into(),
+                                        content: text.to_string(),
+                                        session_id: session_id.to_string(),
+                                        response_id: response_id.to_string(),
+                                        model: provider.model.clone(),
+                                    });
+                                }
+                            }
+                        }
+                        "message_delta" => {
+                            if let Some(usage) = parsed.get("usage") {
+                                if let Some(ot) = usage.get("output_tokens").and_then(|v| v.as_i64()) {
+                                    *total_output_tokens = ot;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn stream_comparison_openai(
+    client: &reqwest::Client,
+    app: &tauri::AppHandle,
+    session_id: &str,
+    response_id: &str,
+    provider: &ResolvedProvider,
+    messages: &[ApiMessage],
+    system_prompt: &Option<String>,
+    full_content: &mut String,
+    total_input_tokens: &mut i64,
+    total_output_tokens: &mut i64,
+) -> Result<(), String> {
+    let mut oai_messages: Vec<serde_json::Value> = Vec::new();
+    if let Some(sp) = system_prompt {
+        if !sp.trim().is_empty() {
+            oai_messages.push(serde_json::json!({"role": "system", "content": sp}));
+        }
+    }
+    for msg in messages {
+        let content_str = if let Some(s) = msg.content.as_str() { s.to_string() } else { msg.content.to_string() };
+        oai_messages.push(serde_json::json!({"role": msg.role, "content": content_str}));
+    }
+
+    let body = serde_json::json!({
+        "model": provider.model,
+        "stream": true,
+        "stream_options": {"include_usage": true},
+        "messages": oai_messages,
+    });
+
+    let url = format!("{}/v1/chat/completions", provider.base_url.trim_end_matches('/'));
+    let mut req = client.post(&url).header("content-type", "application/json");
+    if !provider.api_key.is_empty() {
+        req = req.header("authorization", format!("Bearer {}", provider.api_key));
+    }
+
+    let resp = req.body(body.to_string()).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("API error {}", resp.status()));
+    }
+
+    let mut stream = resp.bytes_stream();
+    let mut buffer = String::new();
+
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.map_err(|e| e.to_string())?;
+        buffer.push_str(&String::from_utf8_lossy(&bytes));
+
+        while let Some(pos) = buffer.find('\n') {
+            let line = buffer[..pos].trim().to_string();
+            buffer = buffer[pos + 1..].to_string();
+
+            if line.starts_with("data: ") {
+                let data = &line[6..];
+                if data == "[DONE]" { continue; }
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
+                    if let Some(choices) = parsed.get("choices").and_then(|c| c.as_array()) {
+                        if let Some(first) = choices.first() {
+                            if let Some(delta) = first.get("delta") {
+                                if let Some(text) = delta.get("content").and_then(|c| c.as_str()) {
+                                    full_content.push_str(text);
+                                    let _ = app.emit("comparison-stream", ComparisonStreamEvent {
+                                        event: "delta".into(),
+                                        content: text.to_string(),
+                                        session_id: session_id.to_string(),
+                                        response_id: response_id.to_string(),
+                                        model: provider.model.clone(),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    if let Some(usage) = parsed.get("usage") {
+                        if let Some(pt) = usage.get("prompt_tokens").and_then(|v| v.as_i64()) {
+                            *total_input_tokens = pt;
+                        }
+                        if let Some(ct) = usage.get("completion_tokens").and_then(|v| v.as_i64()) {
+                            *total_output_tokens = ct;
+                        }
+                    }
+                }
+            }
+        }
     }
     Ok(())
 }

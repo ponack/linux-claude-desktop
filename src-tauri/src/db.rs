@@ -18,6 +18,66 @@ pub struct Message {
     pub created_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CustomEndpoint {
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    pub api_key: String,
+    pub api_format: String,
+    pub default_model: String,
+    pub is_enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ModelPricing {
+    pub id: String,
+    pub model_pattern: String,
+    pub input_cost_per_mtok: f64,
+    pub output_cost_per_mtok: f64,
+    pub provider: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RoutingRule {
+    pub id: String,
+    pub name: String,
+    pub pattern: String,
+    pub task_type: String,
+    pub target_provider: String,
+    pub target_model: String,
+    pub priority: i32,
+    pub is_enabled: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ComparisonSession {
+    pub id: String,
+    pub prompt: String,
+    pub conversation_id: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ComparisonResponse {
+    pub id: String,
+    pub session_id: String,
+    pub provider: String,
+    pub model: String,
+    pub content: String,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub latency_ms: i64,
+    pub estimated_cost: f64,
+    pub rating: Option<i32>,
+    pub notes: Option<String>,
+    pub created_at: String,
+}
+
 pub struct Database {
     conn: Connection,
 }
@@ -213,6 +273,89 @@ impl Database {
                 FOREIGN KEY (knowledge_id) REFERENCES knowledge_base(id) ON DELETE CASCADE
             );"
         ).ok();
+
+        // Migration: Phase 10 — Multi-Model & Comparison tables
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS custom_endpoints (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                base_url TEXT NOT NULL,
+                api_key TEXT NOT NULL DEFAULT '',
+                api_format TEXT NOT NULL DEFAULT 'openai',
+                default_model TEXT NOT NULL DEFAULT '',
+                is_enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS model_pricing (
+                id TEXT PRIMARY KEY,
+                model_pattern TEXT NOT NULL,
+                input_cost_per_mtok REAL NOT NULL DEFAULT 0.0,
+                output_cost_per_mtok REAL NOT NULL DEFAULT 0.0,
+                provider TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS routing_rules (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                pattern TEXT NOT NULL,
+                task_type TEXT NOT NULL DEFAULT 'custom',
+                target_provider TEXT NOT NULL,
+                target_model TEXT NOT NULL,
+                priority INTEGER NOT NULL DEFAULT 0,
+                is_enabled INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS comparison_sessions (
+                id TEXT PRIMARY KEY,
+                prompt TEXT NOT NULL,
+                conversation_id TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS comparison_responses (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                content TEXT NOT NULL DEFAULT '',
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                latency_ms INTEGER NOT NULL DEFAULT 0,
+                estimated_cost REAL NOT NULL DEFAULT 0.0,
+                rating INTEGER,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES comparison_sessions(id) ON DELETE CASCADE
+            );"
+        ).ok();
+
+        // Seed default model pricing if empty
+        let pricing_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM model_pricing", [], |row| row.get(0)
+        ).unwrap_or(0);
+        if pricing_count == 0 {
+            let now = chrono::Utc::now().to_rfc3339();
+            conn.execute_batch(&format!(
+                "INSERT OR IGNORE INTO model_pricing (id, model_pattern, input_cost_per_mtok, output_cost_per_mtok, provider, updated_at) VALUES
+                ('p1', 'claude-opus-4-6', 15.0, 75.0, 'anthropic', '{now}'),
+                ('p2', 'claude-sonnet-4-6', 3.0, 15.0, 'anthropic', '{now}'),
+                ('p3', 'claude-haiku-4-5', 0.8, 4.0, 'anthropic', '{now}'),
+                ('p4', 'gpt-4o', 2.5, 10.0, 'openai', '{now}'),
+                ('p5', 'gpt-4o-mini', 0.15, 0.6, 'openai', '{now}'),
+                ('p6', 'gpt-4.1', 2.0, 8.0, 'openai', '{now}'),
+                ('p7', 'gpt-4.1-mini', 0.4, 1.6, 'openai', '{now}'),
+                ('p8', 'gpt-4.1-nano', 0.1, 0.4, 'openai', '{now}'),
+                ('p9', 'o3', 2.0, 8.0, 'openai', '{now}'),
+                ('p10', 'o4-mini', 1.1, 4.4, 'openai', '{now}');"
+            )).ok();
+        }
+
+        // Migration: add estimated_cost to token_usage
+        conn.execute_batch("ALTER TABLE token_usage ADD COLUMN estimated_cost REAL NOT NULL DEFAULT 0.0;").ok();
 
         // Migration: create artifacts tables if missing
         conn.execute_batch(
@@ -605,9 +748,10 @@ impl Database {
         model: &str,
     ) -> Result<(), rusqlite::Error> {
         let now = chrono::Utc::now().to_rfc3339();
+        let cost = self.estimate_cost(model, input_tokens, output_tokens).unwrap_or(0.0);
         self.conn.execute(
-            "INSERT INTO token_usage (conversation_id, message_id, input_tokens, output_tokens, model, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![conversation_id, message_id, input_tokens, output_tokens, model, &now],
+            "INSERT INTO token_usage (conversation_id, message_id, input_tokens, output_tokens, model, estimated_cost, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![conversation_id, message_id, input_tokens, output_tokens, model, cost, &now],
         )?;
         Ok(())
     }
@@ -814,6 +958,161 @@ impl Database {
     pub fn delete_memory_entry(&self, id: &str) -> Result<(), rusqlite::Error> {
         self.conn.execute("DELETE FROM conversation_memory WHERE id = ?1", params![id])?;
         Ok(())
+    }
+
+    // --- Custom Endpoints ---
+
+    pub fn list_custom_endpoints(&self) -> Result<Vec<CustomEndpoint>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, base_url, api_key, api_format, default_model, is_enabled, created_at, updated_at FROM custom_endpoints ORDER BY name ASC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(CustomEndpoint {
+                id: row.get(0)?, name: row.get(1)?, base_url: row.get(2)?,
+                api_key: row.get(3)?, api_format: row.get(4)?, default_model: row.get(5)?,
+                is_enabled: row.get::<_, i32>(6)? != 0, created_at: row.get(7)?, updated_at: row.get(8)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn get_custom_endpoint(&self, id: &str) -> Result<Option<CustomEndpoint>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, base_url, api_key, api_format, default_model, is_enabled, created_at, updated_at FROM custom_endpoints WHERE id = ?1"
+        )?;
+        let mut rows = stmt.query_map(params![id], |row| {
+            Ok(CustomEndpoint {
+                id: row.get(0)?, name: row.get(1)?, base_url: row.get(2)?,
+                api_key: row.get(3)?, api_format: row.get(4)?, default_model: row.get(5)?,
+                is_enabled: row.get::<_, i32>(6)? != 0, created_at: row.get(7)?, updated_at: row.get(8)?,
+            })
+        })?;
+        match rows.next() {
+            Some(Ok(ep)) => Ok(Some(ep)),
+            _ => Ok(None),
+        }
+    }
+
+    // --- Model Pricing ---
+
+    pub fn list_model_pricing(&self) -> Result<Vec<ModelPricing>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, model_pattern, input_cost_per_mtok, output_cost_per_mtok, provider, updated_at FROM model_pricing ORDER BY provider, model_pattern"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(ModelPricing {
+                id: row.get(0)?, model_pattern: row.get(1)?, input_cost_per_mtok: row.get(2)?,
+                output_cost_per_mtok: row.get(3)?, provider: row.get(4)?, updated_at: row.get(5)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn estimate_cost(&self, model: &str, input_tokens: i64, output_tokens: i64) -> Result<f64, rusqlite::Error> {
+        // Try exact match first, then prefix match
+        let pricing: Option<(f64, f64)> = self.conn.query_row(
+            "SELECT input_cost_per_mtok, output_cost_per_mtok FROM model_pricing WHERE model_pattern = ?1",
+            params![model], |row| Ok((row.get(0)?, row.get(1)?)),
+        ).ok().or_else(|| {
+            // Try prefix match (e.g. "claude-sonnet-4-6" matches "claude-sonnet-4-6-20260101")
+            self.conn.query_row(
+                "SELECT input_cost_per_mtok, output_cost_per_mtok FROM model_pricing WHERE ?1 LIKE model_pattern || '%' ORDER BY LENGTH(model_pattern) DESC LIMIT 1",
+                params![model], |row| Ok((row.get(0)?, row.get(1)?)),
+            ).ok()
+        });
+
+        match pricing {
+            Some((input_cost, output_cost)) => {
+                let cost = (input_tokens as f64 * input_cost + output_tokens as f64 * output_cost) / 1_000_000.0;
+                Ok(cost)
+            }
+            None => Ok(0.0),
+        }
+    }
+
+    // --- Routing Rules ---
+
+    pub fn list_routing_rules(&self) -> Result<Vec<RoutingRule>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, pattern, task_type, target_provider, target_model, priority, is_enabled, created_at FROM routing_rules ORDER BY priority DESC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(RoutingRule {
+                id: row.get(0)?, name: row.get(1)?, pattern: row.get(2)?,
+                task_type: row.get(3)?, target_provider: row.get(4)?, target_model: row.get(5)?,
+                priority: row.get(6)?, is_enabled: row.get::<_, i32>(7)? != 0, created_at: row.get(8)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn match_routing_rule(&self, prompt: &str) -> Result<Option<RoutingRule>, rusqlite::Error> {
+        let rules = self.list_routing_rules()?;
+        let prompt_lower = prompt.to_lowercase();
+        for rule in rules {
+            if !rule.is_enabled { continue; }
+            // Simple keyword matching (case-insensitive)
+            let patterns: Vec<&str> = rule.pattern.split('|').collect();
+            for pat in patterns {
+                if prompt_lower.contains(pat.trim().to_lowercase().as_str()) {
+                    return Ok(Some(rule));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    // --- Comparison ---
+
+    pub fn create_comparison_session(&self, id: &str, prompt: &str, created_at: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "INSERT INTO comparison_sessions (id, prompt, created_at) VALUES (?1, ?2, ?3)",
+            params![id, prompt, created_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn create_comparison_response(&self, id: &str, session_id: &str, provider: &str, model: &str, created_at: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "INSERT INTO comparison_responses (id, session_id, provider, model, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, session_id, provider, model, created_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_comparison_response(&self, id: &str, content: &str, input_tokens: i64, output_tokens: i64, latency_ms: i64, estimated_cost: f64) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "UPDATE comparison_responses SET content=?1, input_tokens=?2, output_tokens=?3, latency_ms=?4, estimated_cost=?5 WHERE id=?6",
+            params![content, input_tokens, output_tokens, latency_ms, estimated_cost, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_comparison_sessions(&self) -> Result<Vec<ComparisonSession>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, prompt, conversation_id, created_at FROM comparison_sessions ORDER BY created_at DESC LIMIT 50"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(ComparisonSession {
+                id: row.get(0)?, prompt: row.get(1)?, conversation_id: row.get(2)?, created_at: row.get(3)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn list_comparison_responses(&self, session_id: &str) -> Result<Vec<ComparisonResponse>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, session_id, provider, model, content, input_tokens, output_tokens, latency_ms, estimated_cost, rating, notes, created_at FROM comparison_responses WHERE session_id = ?1"
+        )?;
+        let rows = stmt.query_map(params![session_id], |row| {
+            Ok(ComparisonResponse {
+                id: row.get(0)?, session_id: row.get(1)?, provider: row.get(2)?,
+                model: row.get(3)?, content: row.get(4)?, input_tokens: row.get(5)?,
+                output_tokens: row.get(6)?, latency_ms: row.get(7)?, estimated_cost: row.get(8)?,
+                rating: row.get(9)?, notes: row.get(10)?, created_at: row.get(11)?,
+            })
+        })?;
+        rows.collect()
     }
 
     // --- Knowledge Base ---
@@ -1144,6 +1443,18 @@ pub fn get_api_key(state: tauri::State<AppState>) -> Result<Option<String>, Stri
 #[tauri::command]
 pub fn set_api_key(state: tauri::State<AppState>, key: String) -> Result<(), String> {
     state.db.lock().unwrap().set_setting("api_key", &key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_custom_endpoint_id(state: tauri::State<AppState>) -> Result<String, String> {
+    state.db.lock().unwrap()
+        .get_setting("custom_endpoint_id").map_err(|e| e.to_string())
+        .map(|v| v.unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn set_custom_endpoint_id(state: tauri::State<AppState>, id: String) -> Result<(), String> {
+    state.db.lock().unwrap().set_setting("custom_endpoint_id", &id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1651,6 +1962,173 @@ pub fn save_memory_entry(state: tauri::State<AppState>, key: String, value: Stri
 #[tauri::command]
 pub fn delete_memory_entry(state: tauri::State<AppState>, id: String) -> Result<(), String> {
     state.db.lock().unwrap().delete_memory_entry(&id).map_err(|e| e.to_string())
+}
+
+// --- Custom Endpoints ---
+
+#[tauri::command]
+pub fn get_custom_endpoints(state: tauri::State<AppState>) -> Result<Vec<CustomEndpoint>, String> {
+    state.db.lock().unwrap().list_custom_endpoints().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_custom_endpoint(
+    state: tauri::State<AppState>, name: String, base_url: String,
+    api_key: String, api_format: String, default_model: String,
+) -> Result<String, String> {
+    let db = state.db.lock().unwrap();
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    db.conn.execute(
+        "INSERT INTO custom_endpoints (id, name, base_url, api_key, api_format, default_model, is_enabled, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7)",
+        params![id, name, base_url, api_key, api_format, default_model, now],
+    ).map_err(|e| e.to_string())?;
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn update_custom_endpoint(
+    state: tauri::State<AppState>, id: String, name: String, base_url: String,
+    api_key: String, api_format: String, default_model: String, is_enabled: bool,
+) -> Result<(), String> {
+    let db = state.db.lock().unwrap();
+    let now = chrono::Utc::now().to_rfc3339();
+    db.conn.execute(
+        "UPDATE custom_endpoints SET name=?1, base_url=?2, api_key=?3, api_format=?4, default_model=?5, is_enabled=?6, updated_at=?7 WHERE id=?8",
+        params![name, base_url, api_key, api_format, default_model, is_enabled, now, id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_custom_endpoint(state: tauri::State<AppState>, id: String) -> Result<(), String> {
+    state.db.lock().unwrap().conn.execute("DELETE FROM custom_endpoints WHERE id=?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// --- Model Pricing ---
+
+#[tauri::command]
+pub fn get_model_pricing(state: tauri::State<AppState>) -> Result<Vec<ModelPricing>, String> {
+    state.db.lock().unwrap().list_model_pricing().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_model_pricing(
+    state: tauri::State<AppState>, model_pattern: String,
+    input_cost: f64, output_cost: f64, provider: String,
+) -> Result<(), String> {
+    let db = state.db.lock().unwrap();
+    let now = chrono::Utc::now().to_rfc3339();
+    let id = uuid::Uuid::new_v4().to_string();
+    db.conn.execute(
+        "INSERT OR REPLACE INTO model_pricing (id, model_pattern, input_cost_per_mtok, output_cost_per_mtok, provider, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![id, model_pattern, input_cost, output_cost, provider, now],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_model_pricing(state: tauri::State<AppState>, id: String) -> Result<(), String> {
+    state.db.lock().unwrap().conn.execute("DELETE FROM model_pricing WHERE id=?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// --- Routing Rules ---
+
+#[tauri::command]
+pub fn get_routing_rules(state: tauri::State<AppState>) -> Result<Vec<RoutingRule>, String> {
+    state.db.lock().unwrap().list_routing_rules().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_routing_rule(
+    state: tauri::State<AppState>, name: String, pattern: String,
+    task_type: String, target_provider: String, target_model: String, priority: i32,
+) -> Result<String, String> {
+    let db = state.db.lock().unwrap();
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    db.conn.execute(
+        "INSERT INTO routing_rules (id, name, pattern, task_type, target_provider, target_model, priority, is_enabled, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8)",
+        params![id, name, pattern, task_type, target_provider, target_model, priority, now],
+    ).map_err(|e| e.to_string())?;
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn update_routing_rule(
+    state: tauri::State<AppState>, id: String, name: String, pattern: String,
+    task_type: String, target_provider: String, target_model: String, priority: i32, is_enabled: bool,
+) -> Result<(), String> {
+    let db = state.db.lock().unwrap();
+    db.conn.execute(
+        "UPDATE routing_rules SET name=?1, pattern=?2, task_type=?3, target_provider=?4, target_model=?5, priority=?6, is_enabled=?7 WHERE id=?8",
+        params![name, pattern, task_type, target_provider, target_model, priority, is_enabled, id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_routing_rule(state: tauri::State<AppState>, id: String) -> Result<(), String> {
+    state.db.lock().unwrap().conn.execute("DELETE FROM routing_rules WHERE id=?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// --- Comparison ---
+
+#[tauri::command]
+pub fn get_comparison_sessions(state: tauri::State<AppState>) -> Result<Vec<ComparisonSession>, String> {
+    state.db.lock().unwrap().list_comparison_sessions().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_comparison_responses(state: tauri::State<AppState>, session_id: String) -> Result<Vec<ComparisonResponse>, String> {
+    state.db.lock().unwrap().list_comparison_responses(&session_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn rate_comparison_response(state: tauri::State<AppState>, response_id: String, rating: i32) -> Result<(), String> {
+    state.db.lock().unwrap().conn.execute(
+        "UPDATE comparison_responses SET rating=?1 WHERE id=?2", params![rating, response_id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_comparison_session(state: tauri::State<AppState>, id: String) -> Result<(), String> {
+    let db = state.db.lock().unwrap();
+    db.conn.execute("DELETE FROM comparison_responses WHERE session_id=?1", params![id]).map_err(|e| e.to_string())?;
+    db.conn.execute("DELETE FROM comparison_sessions WHERE id=?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// --- Cost Queries ---
+
+#[tauri::command]
+pub fn get_conversation_cost(state: tauri::State<AppState>, conversation_id: String) -> Result<f64, String> {
+    let db = state.db.lock().unwrap();
+    let cost: f64 = db.conn.query_row(
+        "SELECT COALESCE(SUM(estimated_cost), 0.0) FROM token_usage WHERE conversation_id=?1",
+        params![conversation_id], |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+    Ok(cost)
+}
+
+#[tauri::command]
+pub fn get_cost_summary(state: tauri::State<AppState>) -> Result<Vec<(String, f64, i64, i64)>, String> {
+    let db = state.db.lock().unwrap();
+    let mut stmt = db.conn.prepare(
+        "SELECT model, COALESCE(SUM(estimated_cost), 0.0), COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0) FROM token_usage GROUP BY model ORDER BY SUM(estimated_cost) DESC"
+    ).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?, row.get::<_, i64>(2)?, row.get::<_, i64>(3)?))
+    }).map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
 }
 
 // --- Knowledge Base ---

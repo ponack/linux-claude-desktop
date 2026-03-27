@@ -298,12 +298,12 @@ linux-claude-desktop/
 - [x] Local knowledge base (manual, URL, or file import; project-scoped; enable/disable)
 - [x] File watcher (auto-update knowledge entries when watched files change)
 
-### Phase 10 — Multi-Model & Comparison
-- [ ] Side-by-side model comparison (same prompt to multiple models)
-- [ ] Model routing rules (auto-select model based on task type)
-- [ ] Response grading/ranking (rate responses to track model quality)
-- [ ] Custom model endpoints (add arbitrary OpenAI-compatible providers)
-- [ ] Cost estimation per conversation (based on model pricing)
+### Phase 10 — Multi-Model & Comparison :white_check_mark:
+- [x] Side-by-side model comparison (same prompt to multiple models)
+- [x] Model routing rules (auto-select model based on task type)
+- [x] Response grading/ranking (rate responses to track model quality)
+- [x] Custom model endpoints (add arbitrary OpenAI-compatible providers)
+- [x] Cost estimation per conversation (based on model pricing)
 
 ### Phase 11 — Voice & Accessibility
 - [ ] Speech-to-text input (system mic via PipeWire/PulseAudio)
