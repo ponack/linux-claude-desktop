@@ -28,6 +28,7 @@
   let activeModel = $state("");
   let activeProvider = $state("");
   let tokenUsage = $state(null);
+  let conversationCost = $state(0);
   let promptVariableDialog = $state(null); // { content, variables: [{name, value}] }
   let agentMode = $state(false);
   let agentSteps = $state([]); // [{step, description, status}]
@@ -115,6 +116,13 @@
     try {
       tokenUsage = await invoke("get_conversation_usage", { conversationId });
     } catch (e) { tokenUsage = null; }
+  }
+
+  async function loadConversationCost() {
+    if (!conversationId) { conversationCost = 0; return; }
+    try {
+      conversationCost = await invoke("get_conversation_cost", { conversationId });
+    } catch (e) { conversationCost = 0; }
   }
 
   async function loadProjects() {
@@ -324,6 +332,7 @@
   onMount(() => {
     const unlistenUsage = listen("token-usage", () => {
       loadTokenUsage();
+      loadConversationCost();
     });
 
     const unlisten = listen("stream-event", (event) => {
@@ -763,6 +772,9 @@ Be thorough in each step. Do not skip steps or combine them.`;
               <div class="token-bar-fill" style="width: {pct}%; background: {barColor};"></div>
             </div>
             <span class="token-bar-label">{tokenUsage.total_tokens.toLocaleString()}</span>
+            {#if conversationCost > 0}
+              <span class="cost-label">${conversationCost < 0.01 ? conversationCost.toFixed(4) : conversationCost.toFixed(2)}</span>
+            {/if}
           </div>
         {/if}
         <div class="toolbar-actions">
@@ -1050,6 +1062,12 @@ Be thorough in each step. Do not skip steps or combine them.`;
     font-size: 10px;
     color: var(--text-muted);
     white-space: nowrap;
+  }
+  .cost-label {
+    font-size: 10px;
+    color: var(--accent);
+    white-space: nowrap;
+    font-weight: 500;
   }
 
   .toolbar-actions {

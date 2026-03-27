@@ -3,7 +3,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
 
-  let { activeConversationId, onSelect, onNewChat, openSettings, refreshKey, collapsed = false } = $props();
+  let { activeConversationId, onSelect, onNewChat, openSettings, openComparison, refreshKey, collapsed = false } = $props();
 
   let conversations = $state([]);
   let searchQuery = $state("");
@@ -199,6 +199,15 @@
         Update available: v{updateInfo.latest_version}
       </button>
     {/if}
+    <button class="settings-btn" onclick={openComparison} aria-label="Compare models" title="Compare models (Ctrl+Shift+M)">
+      {#if collapsed}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="8" height="18" rx="1"/><rect x="14" y="3" width="8" height="18" rx="1"/>
+        </svg>
+      {:else}
+        Compare
+      {/if}
+    </button>
     <button class="settings-btn" onclick={openSettings} aria-label="Open settings">
       {#if collapsed}
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

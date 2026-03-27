@@ -14,6 +14,8 @@
     { id: "projects", label: "Projects", icon: "M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" },
     { id: "integrations", label: "Integrations", icon: "M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" },
     { id: "schedules", label: "Schedules", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 6v6l4 2" },
+    { id: "endpoints", label: "Endpoints", icon: "M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9" },
+    { id: "routing", label: "Routing", icon: "M16 3h5v5 M4 20L21 3 M21 16v5h-5 M15 15l6 6 M4 4l5 5" },
     { id: "knowledge", label: "Knowledge", icon: "M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" },
     { id: "data", label: "Data & Usage", icon: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M12 3v12 M8 11l4 4 4-4" },
     { id: "about", label: "About", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 16v-4 M12 8h.01" },
@@ -93,6 +95,33 @@
   // File Watches
   let fileWatches = $state([]);
 
+  // Custom Endpoints
+  let customEndpoints = $state([]);
+  let newEpName = $state("");
+  let newEpBaseUrl = $state("");
+  let newEpApiKey = $state("");
+  let newEpFormat = $state("openai");
+  let newEpModel = $state("");
+  let editingEndpoint = $state(null);
+  let testingEndpoint = $state(false);
+  let testResult = $state("");
+
+  // Model Pricing
+  let modelPricing = $state([]);
+
+  // Routing Rules
+  let routingRules = $state([]);
+  let newRuleName = $state("");
+  let newRulePattern = $state("");
+  let newRuleTaskType = $state("custom");
+  let newRuleProvider = $state("anthropic");
+  let newRuleModel = $state("");
+  let newRulePriority = $state(0);
+  let editingRule = $state(null);
+
+  // Cost Summary
+  let costSummary = $state([]);
+
   // Token Usage Analytics
   let totalUsage = $state(null);
 
@@ -120,9 +149,14 @@
     { id: "o3-mini", name: "o3-mini (Reasoning, fast)" },
   ];
 
+  let customEndpointModels = $derived(
+    customEndpoints.filter(ep => ep.is_enabled && ep.default_model).map(ep => ({ id: ep.default_model, name: `${ep.name}: ${ep.default_model}` }))
+  );
+
   let availableModels = $derived(
     provider === "anthropic" ? anthropicModels :
     provider === "openai" ? openaiModels :
+    provider === "custom" ? customEndpointModels :
     ollamaModels.map(m => ({ id: m, name: m }))
   );
 
@@ -149,6 +183,10 @@
       await loadMemoryEntries();
       await loadKnowledgeEntries();
       await loadFileWatches();
+      await loadCustomEndpoints();
+      await loadRoutingRules();
+      await loadModelPricing();
+      await loadCostSummary();
 
       try {
         const info = await invoke("get_app_info");
@@ -194,6 +232,12 @@
         model = "claude-sonnet-4-6"; await invoke("set_model", { model });
       } else if (provider === "openai" && !openaiModels.find(m => m.id === model)) {
         model = "gpt-4o"; await invoke("set_model", { model });
+      } else if (provider === "custom") {
+        const enabled = customEndpoints.filter(e => e.is_enabled);
+        if (enabled.length > 0) {
+          await invoke("set_custom_endpoint_id", { id: enabled[0].id });
+          if (enabled[0].default_model) { model = enabled[0].default_model; await invoke("set_model", { model }); }
+        }
       }
     });
   }
@@ -202,6 +246,7 @@
   async function saveOpenaiApiKey() { await autoSave(() => invoke("set_openai_api_key", { key: openaiApiKey })); }
   async function saveOpenaiBaseUrl() { await autoSave(() => invoke("set_openai_base_url", { url: openaiBaseUrl })); }
   async function saveOllamaBaseUrl() { await autoSave(() => invoke("set_ollama_base_url", { url: ollamaBaseUrl })); }
+  async function saveCustomEndpointId(id) { await autoSave(() => invoke("set_custom_endpoint_id", { id })); }
   async function saveModel() { await autoSave(() => invoke("set_model", { model })); }
   async function saveSystemPrompt() { await autoSave(() => invoke("set_system_prompt", { prompt: systemPrompt })); }
   async function saveUpdateInterval() { await autoSave(() => invoke("set_update_interval", { interval: updateInterval })); }
@@ -425,6 +470,70 @@
     await loadFileWatches();
   }
 
+  // Custom Endpoints
+  async function loadCustomEndpoints() { try { customEndpoints = await invoke("get_custom_endpoints"); } catch (e) {} }
+  async function addEndpoint() {
+    if (!newEpName.trim() || !newEpBaseUrl.trim()) return;
+    await invoke("create_custom_endpoint", {
+      name: newEpName, baseUrl: newEpBaseUrl, apiKey: newEpApiKey,
+      apiFormat: newEpFormat, defaultModel: newEpModel,
+    });
+    newEpName = ""; newEpBaseUrl = ""; newEpApiKey = ""; newEpFormat = "openai"; newEpModel = "";
+    await loadCustomEndpoints();
+  }
+  async function deleteEndpoint(id) {
+    await invoke("delete_custom_endpoint", { id });
+    await loadCustomEndpoints();
+  }
+  async function saveEndpoint(ep) {
+    await invoke("update_custom_endpoint", {
+      id: ep.id, name: ep.name, baseUrl: ep.base_url, apiKey: ep.api_key,
+      apiFormat: ep.api_format, defaultModel: ep.default_model, isEnabled: ep.is_enabled,
+    });
+    editingEndpoint = null;
+    await loadCustomEndpoints();
+  }
+  async function testEndpointConnection(baseUrl, apiKey, apiFormat) {
+    testingEndpoint = true;
+    testResult = "";
+    try {
+      testResult = await invoke("test_custom_endpoint", { baseUrl, apiKey, apiFormat });
+    } catch (e) {
+      testResult = `Failed: ${e}`;
+    }
+    testingEndpoint = false;
+  }
+
+  // Model Pricing
+  async function loadModelPricing() { try { modelPricing = await invoke("get_model_pricing"); } catch (e) {} }
+
+  // Routing Rules
+  async function loadRoutingRules() { try { routingRules = await invoke("get_routing_rules"); } catch (e) {} }
+  async function addRoutingRule() {
+    if (!newRuleName.trim() || !newRulePattern.trim() || !newRuleModel.trim()) return;
+    await invoke("create_routing_rule", {
+      name: newRuleName, pattern: newRulePattern, taskType: newRuleTaskType,
+      targetProvider: newRuleProvider, targetModel: newRuleModel, priority: newRulePriority,
+    });
+    newRuleName = ""; newRulePattern = ""; newRuleTaskType = "custom"; newRuleModel = ""; newRulePriority = 0;
+    await loadRoutingRules();
+  }
+  async function deleteRoutingRule(id) {
+    await invoke("delete_routing_rule", { id });
+    await loadRoutingRules();
+  }
+  async function toggleRoutingRule(rule) {
+    await invoke("update_routing_rule", {
+      id: rule.id, name: rule.name, pattern: rule.pattern, taskType: rule.task_type,
+      targetProvider: rule.target_provider, targetModel: rule.target_model,
+      priority: rule.priority, isEnabled: !rule.is_enabled,
+    });
+    await loadRoutingRules();
+  }
+
+  // Cost Summary
+  async function loadCostSummary() { try { costSummary = await invoke("get_cost_summary"); } catch (e) {} }
+
   function formatInterval(ms) {
     if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
     if (ms >= 3600000) return `${Math.round(ms / 3600000)}h`;
@@ -490,6 +599,7 @@
               <option value="anthropic">Anthropic (Claude)</option>
               <option value="openai">OpenAI</option>
               <option value="ollama">Ollama (Local)</option>
+              <option value="custom">Custom Endpoint</option>
             </select>
           </div>
 
@@ -525,6 +635,22 @@
               <p class="hint">
                 {ollamaModels.length > 0 ? `Found ${ollamaModels.length} model(s)` : "Make sure Ollama is running"}
               </p>
+            </div>
+          {/if}
+
+          {#if provider === "custom"}
+            <div class="field">
+              <label for="custom-ep">Custom Endpoint</label>
+              {#if customEndpoints.filter(e => e.is_enabled).length > 0}
+                <select id="custom-ep" onchange={(e) => saveCustomEndpointId(e.target.value)}>
+                  {#each customEndpoints.filter(e => e.is_enabled) as ep}
+                    <option value={ep.id}>{ep.name} ({ep.default_model})</option>
+                  {/each}
+                </select>
+                <p class="hint">Select which custom endpoint to use for conversations.</p>
+              {:else}
+                <p class="hint">No custom endpoints configured. Add one in the Endpoints tab.</p>
+              {/if}
             </div>
           {/if}
 
@@ -829,6 +955,136 @@
         </div>
       </div>
 
+    <!-- CUSTOM ENDPOINTS -->
+    {:else if activeSection === "endpoints"}
+      <h2>Custom Endpoints</h2>
+      <p class="section-desc">Add OpenAI-compatible or Anthropic-compatible API endpoints (e.g. Together AI, Groq, Fireworks).</p>
+
+      {#each customEndpoints as ep}
+        <div class="setting-card">
+          {#if editingEndpoint === ep.id}
+            <div class="form-grid">
+              <input class="setting-input" bind:value={ep.name} placeholder="Name" />
+              <input class="setting-input" bind:value={ep.base_url} placeholder="Base URL" />
+              <input class="setting-input" type="password" bind:value={ep.api_key} placeholder="API Key" />
+              <select class="setting-select" bind:value={ep.api_format}>
+                <option value="openai">OpenAI-compatible</option>
+                <option value="anthropic">Anthropic-compatible</option>
+              </select>
+              <input class="setting-input" bind:value={ep.default_model} placeholder="Default model" />
+              <div class="card-actions">
+                <button class="btn-sm btn-primary" onclick={() => saveEndpoint(ep)}>Save</button>
+                <button class="btn-sm" onclick={() => { editingEndpoint = null; loadCustomEndpoints(); }}>Cancel</button>
+              </div>
+            </div>
+          {:else}
+            <div class="card-row">
+              <div class="card-info">
+                <strong>{ep.name}</strong>
+                <span class="text-muted">{ep.base_url} ({ep.api_format})</span>
+                <span class="text-muted">Model: {ep.default_model || 'none'}</span>
+              </div>
+              <div class="card-actions">
+                <label class="toggle-label">
+                  <input type="checkbox" checked={ep.is_enabled} onchange={() => { ep.is_enabled = !ep.is_enabled; saveEndpoint(ep); }} />
+                  Enabled
+                </label>
+                <button class="btn-sm" onclick={() => { editingEndpoint = ep.id; }}>Edit</button>
+                <button class="btn-sm btn-danger" onclick={() => deleteEndpoint(ep.id)}>Delete</button>
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/each}
+
+      <div class="add-form">
+        <h3>Add Endpoint</h3>
+        <div class="form-grid">
+          <input class="setting-input" bind:value={newEpName} placeholder="Name (e.g. Together AI)" />
+          <input class="setting-input" bind:value={newEpBaseUrl} placeholder="Base URL (e.g. https://api.together.xyz)" />
+          <input class="setting-input" type="password" bind:value={newEpApiKey} placeholder="API Key" />
+          <select class="setting-select" bind:value={newEpFormat}>
+            <option value="openai">OpenAI-compatible</option>
+            <option value="anthropic">Anthropic-compatible</option>
+          </select>
+          <input class="setting-input" bind:value={newEpModel} placeholder="Default model" />
+        </div>
+        <div class="form-actions">
+          <button class="btn-sm" onclick={() => testEndpointConnection(newEpBaseUrl, newEpApiKey, newEpFormat)} disabled={testingEndpoint || !newEpBaseUrl}>
+            {testingEndpoint ? 'Testing...' : 'Test Connection'}
+          </button>
+          {#if testResult}<span class="text-muted">{testResult}</span>{/if}
+          <button class="btn-sm btn-primary" onclick={addEndpoint} disabled={!newEpName || !newEpBaseUrl}>Add</button>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 24px;">Model Pricing</h3>
+      <p class="section-desc">Cost per million tokens. Pre-populated for common models.</p>
+      <div class="pricing-table">
+        <div class="pricing-header">
+          <span>Model</span><span>Input $/Mtok</span><span>Output $/Mtok</span><span>Provider</span>
+        </div>
+        {#each modelPricing as p}
+          <div class="pricing-row">
+            <span>{p.model_pattern}</span>
+            <span>${p.input_cost_per_mtok}</span>
+            <span>${p.output_cost_per_mtok}</span>
+            <span class="text-muted">{p.provider}</span>
+          </div>
+        {/each}
+      </div>
+
+    <!-- MODEL ROUTING -->
+    {:else if activeSection === "routing"}
+      <h2>Model Routing</h2>
+      <p class="section-desc">Auto-select models based on prompt content. Rules are evaluated by priority (highest first).</p>
+
+      {#each routingRules as rule}
+        <div class="setting-card">
+          <div class="card-row">
+            <div class="card-info">
+              <strong>{rule.name}</strong>
+              <span class="text-muted">Pattern: {rule.pattern}</span>
+              <span class="text-muted">Target: {rule.target_provider}/{rule.target_model}</span>
+              <span class="text-muted">Priority: {rule.priority} | Type: {rule.task_type}</span>
+            </div>
+            <div class="card-actions">
+              <label class="toggle-label">
+                <input type="checkbox" checked={rule.is_enabled} onchange={() => toggleRoutingRule(rule)} />
+                Enabled
+              </label>
+              <button class="btn-sm btn-danger" onclick={() => deleteRoutingRule(rule.id)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      {/each}
+
+      <div class="add-form">
+        <h3>Add Rule</h3>
+        <div class="form-grid">
+          <input class="setting-input" bind:value={newRuleName} placeholder="Rule name (e.g. 'Code tasks')" />
+          <input class="setting-input" bind:value={newRulePattern} placeholder="Keywords separated by | (e.g. code|debug|function)" />
+          <select class="setting-select" bind:value={newRuleTaskType}>
+            <option value="code">Code</option>
+            <option value="creative">Creative</option>
+            <option value="analysis">Analysis</option>
+            <option value="quick">Quick</option>
+            <option value="custom">Custom</option>
+          </select>
+          <select class="setting-select" bind:value={newRuleProvider}>
+            <option value="anthropic">Anthropic</option>
+            <option value="openai">OpenAI</option>
+            <option value="ollama">Ollama</option>
+            <option value="custom">Custom</option>
+          </select>
+          <input class="setting-input" bind:value={newRuleModel} placeholder="Target model (e.g. claude-sonnet-4-6)" />
+          <input class="setting-input" type="number" bind:value={newRulePriority} placeholder="Priority (higher = first)" />
+        </div>
+        <div class="form-actions">
+          <button class="btn-sm btn-primary" onclick={addRoutingRule} disabled={!newRuleName || !newRulePattern || !newRuleModel}>Add Rule</button>
+        </div>
+      </div>
+
     <!-- KNOWLEDGE & CONTEXT -->
     {:else if activeSection === "knowledge"}
       <div class="section">
@@ -964,6 +1220,29 @@
             <div class="usage-stat">
               <span class="usage-value">{totalUsage.message_count.toLocaleString()}</span>
               <span class="usage-label">Messages</span>
+            </div>
+          </div>
+        {/if}
+
+        {#if costSummary.length > 0}
+          <h3>Cost by Model</h3>
+          <div class="pricing-table">
+            <div class="pricing-header">
+              <span>Model</span><span>Est. Cost</span><span>Input Tokens</span><span>Output Tokens</span>
+            </div>
+            {#each costSummary as [model, cost, inputTok, outputTok]}
+              <div class="pricing-row">
+                <span>{model || 'unknown'}</span>
+                <span>${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(2)}</span>
+                <span>{inputTok.toLocaleString()}</span>
+                <span>{outputTok.toLocaleString()}</span>
+              </div>
+            {/each}
+            <div class="pricing-row" style="font-weight: 600; border-top: 2px solid var(--border-color, #444);">
+              <span>Total</span>
+              <span>${costSummary.reduce((s, c) => s + c[1], 0).toFixed(2)}</span>
+              <span>{costSummary.reduce((s, c) => s + c[2], 0).toLocaleString()}</span>
+              <span>{costSummary.reduce((s, c) => s + c[3], 0).toLocaleString()}</span>
             </div>
           </div>
         {/if}
@@ -1441,4 +1720,100 @@
     width: auto;
     margin: 0;
   }
+
+  /* Endpoints & Routing */
+  .setting-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color, #444);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  .card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .card-info strong { font-size: 0.95em; }
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .toggle-label {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .toggle-label input { width: auto; margin: 0; }
+  .btn-sm {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, #444);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.8em;
+  }
+  .btn-sm:hover { background: var(--bg-secondary); }
+  .btn-sm.btn-primary {
+    background: var(--accent-color, #6366f1);
+    border-color: var(--accent-color, #6366f1);
+    color: white;
+  }
+  .btn-sm.btn-danger { border-color: #ef4444; color: #ef4444; }
+  .btn-sm.btn-danger:hover { background: #ef444420; }
+  .form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .add-form {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px dashed var(--border-color, #444);
+    border-radius: 8px;
+  }
+  .add-form h3 { margin: 0 0 8px; font-size: 0.95em; }
+  .form-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+  }
+  .section-desc {
+    color: var(--text-secondary);
+    font-size: 0.85em;
+    margin-bottom: 12px;
+  }
+  .pricing-table {
+    border: 1px solid var(--border-color, #444);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.85em;
+  }
+  .pricing-header, .pricing-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    padding: 6px 12px;
+    gap: 8px;
+  }
+  .pricing-header {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-color, #444);
+  }
+  .pricing-row { border-bottom: 1px solid var(--border-color, #333); }
+  .pricing-row:last-child { border-bottom: none; }
 </style>

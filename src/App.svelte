@@ -8,6 +8,7 @@
   import Sidebar from "./lib/Sidebar.svelte";
   import Chat from "./lib/Chat.svelte";
   import Settings from "./lib/Settings.svelte";
+  import ComparisonView from "./lib/ComparisonView.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
 
   let currentView = $state("chat");
@@ -126,6 +127,14 @@
     currentView = "chat";
   }
 
+  function openComparison() {
+    currentView = "compare";
+  }
+
+  function closeComparison() {
+    currentView = "chat";
+  }
+
   function handleGlobalKeydown(e) {
     // Ctrl+N: New chat
     if (e.ctrlKey && e.key === "n") {
@@ -142,6 +151,13 @@
     if (e.ctrlKey && e.key === "p") {
       e.preventDefault();
       showCommandPalette = !showCommandPalette;
+      return;
+    }
+    // Ctrl+Shift+M: Toggle comparison view
+    if (e.ctrlKey && e.shiftKey && e.key === "M") {
+      e.preventDefault();
+      if (currentView === "compare") closeComparison();
+      else openComparison();
       return;
     }
     // Ctrl+L: Focus chat input
@@ -175,12 +191,15 @@
     onSelect={onSelectConversation}
     {onNewChat}
     {openSettings}
+    {openComparison}
     refreshKey={sidebarRefresh}
-    collapsed={currentView === "settings"}
+    collapsed={currentView === "settings" || currentView === "compare"}
   />
   <main class="main-content">
     {#if currentView === "settings"}
       <Settings onClose={closeSettings} />
+    {:else if currentView === "compare"}
+      <ComparisonView onClose={closeComparison} />
     {:else}
       <Chat
         conversationId={activeConversationId}
