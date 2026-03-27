@@ -3,7 +3,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
 
-  let { activeConversationId, onSelect, onNewChat, openSettings, openComparison, refreshKey, collapsed = false } = $props();
+  let { activeConversationId, onSelect, onNewChat, openSettings, openComparison, onBackToChat, currentView = "chat", refreshKey, collapsed = false } = $props();
 
   let conversations = $state([]);
   let searchQuery = $state("");
@@ -199,24 +199,42 @@
         Update available: v{updateInfo.latest_version}
       </button>
     {/if}
-    <button class="settings-btn" onclick={openComparison} aria-label="Compare models" title="Compare models (Ctrl+Shift+M)">
-      {#if collapsed}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="2" y="3" width="8" height="18" rx="1"/><rect x="14" y="3" width="8" height="18" rx="1"/>
-        </svg>
-      {:else}
-        Compare
-      {/if}
+    <button
+      class="nav-btn"
+      class:active={currentView === "chat"}
+      onclick={onBackToChat}
+      aria-label="Chat"
+      title="Chat (Ctrl+N)"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      {#if !collapsed}<span>Chat</span>{/if}
     </button>
-    <button class="settings-btn" onclick={openSettings} aria-label="Open settings">
-      {#if collapsed}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-      {:else}
-        Settings
-      {/if}
+    <button
+      class="nav-btn"
+      class:active={currentView === "compare"}
+      onclick={openComparison}
+      aria-label="Compare models"
+      title="Compare models (Ctrl+Shift+M)"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="8" height="18" rx="1"/><rect x="14" y="3" width="8" height="18" rx="1"/>
+      </svg>
+      {#if !collapsed}<span>Compare</span>{/if}
+    </button>
+    <button
+      class="nav-btn"
+      class:active={currentView === "settings"}
+      onclick={openSettings}
+      aria-label="Settings"
+      title="Settings (Ctrl+,)"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      {#if !collapsed}<span>Settings</span>{/if}
     </button>
   </div>
 </aside>
@@ -322,12 +340,10 @@
     align-items: center;
   }
 
-  .sidebar.collapsed .settings-btn {
+  .sidebar.collapsed .nav-btn {
     width: 36px;
     height: 36px;
     padding: 0;
-    display: flex;
-    align-items: center;
     justify-content: center;
   }
 
@@ -467,17 +483,26 @@
     background: rgba(78, 204, 163, 0.25);
   }
 
-  .settings-btn {
+  .nav-btn {
     width: 100%;
     padding: 8px;
     border-radius: 8px;
     font-size: 13px;
     color: var(--text-secondary);
-    transition: background 0.15s;
+    transition: background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
-  .settings-btn:hover {
+  .nav-btn:hover {
     background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .nav-btn.active {
+    background: var(--bg-tertiary);
+    color: var(--accent, #a78bfa);
   }
 
   /* Update Dialog */

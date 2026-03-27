@@ -192,6 +192,8 @@
     {onNewChat}
     {openSettings}
     {openComparison}
+    onBackToChat={onNewChat}
+    {currentView}
     refreshKey={sidebarRefresh}
     collapsed={currentView === "settings" || currentView === "compare"}
   />
