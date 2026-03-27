@@ -3,13 +3,14 @@ use crate::providers::{ProviderType, ResolvedProvider};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const GITHUB_RELEASES_URL: &str = "https://api.github.com/repos/ponack/linux-claude-desktop/releases/latest";
 
 static STOP_FLAG: AtomicBool = AtomicBool::new(false);
+static RECORDING_CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
 
 /// Compare semver strings: returns true if `latest` is newer than `current`
 fn version_is_newer(latest: &str, current: &str) -> bool {
@@ -1764,4 +1765,163 @@ fn strip_html_tags(html: &str) -> String {
     }
 
     cleaned.trim().to_string()
+}
+
+// ── Voice: TTS / STT ─────────────────────────────────────────────────────────
+
+fn strip_markdown_for_tts(text: &str) -> String {
+    let mut result = String::new();
+    let mut in_code_block = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            in_code_block = !in_code_block;
+            continue;
+        }
+        if in_code_block { continue; }
+        // Remove heading markers, blockquotes, horizontal rules
+        let line = trimmed
+            .trim_start_matches('#')
+            .trim_start_matches('>')
+            .trim();
+        if line == "---" || line == "***" || line == "___" { continue; }
+        // Remove bold/italic/code markers
+        let line = line
+            .replace("**", "")
+            .replace("__", "")
+            .replace('`', "");
+        // Collapse * used for italic (single)
+        let line: String = line.chars().filter(|&c| c != '*').collect();
+        // Strip markdown links [text](url) → text
+        let mut cleaned = String::new();
+        let mut chars = line.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '[' {
+                // Collect link text until ]
+                let mut link_text = String::new();
+                for ch2 in chars.by_ref() {
+                    if ch2 == ']' { break; }
+                    link_text.push(ch2);
+                }
+                // Skip (url)
+                if chars.peek() == Some(&'(') {
+                    chars.next();
+                    for ch2 in chars.by_ref() {
+                        if ch2 == ')' { break; }
+                    }
+                }
+                cleaned.push_str(&link_text);
+            } else {
+                cleaned.push(ch);
+            }
+        }
+        if !cleaned.trim().is_empty() {
+            result.push_str(cleaned.trim());
+            result.push(' ');
+        }
+    }
+    result.trim().to_string()
+}
+
+fn command_exists(name: &str) -> bool {
+    std::process::Command::new("which")
+        .arg(name)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+pub fn check_tts_available() -> bool {
+    command_exists("spd-say") || command_exists("espeak-ng")
+}
+
+#[tauri::command]
+pub fn check_stt_available() -> bool {
+    command_exists("arecord") && (command_exists("whisper-cli") || command_exists("whisper"))
+}
+
+/// rate: 0–200 (default 100). Maps to spd-say -100..100 or espeak-ng 80..280 wpm.
+#[tauri::command]
+pub fn speak_text(text: String, rate: i32) -> Result<(), String> {
+    let _ = std::process::Command::new("pkill").args(["-f", "spd-say"]).output();
+    let _ = std::process::Command::new("pkill").args(["-f", "espeak-ng"]).output();
+
+    let cleaned = strip_markdown_for_tts(&text);
+    if cleaned.trim().is_empty() { return Ok(()); }
+
+    // Try spd-say (-w = wait, -r = rate -100..100)
+    let spd_rate = (rate - 100).to_string();
+    if command_exists("spd-say") {
+        let _ = std::process::Command::new("spd-say")
+            .args(["-r", &spd_rate, &cleaned])
+            .spawn();
+        return Ok(());
+    }
+
+    // Fallback: espeak-ng (-s = speed in wpm)
+    let espeak_rate = (80 + rate).to_string();
+    if command_exists("espeak-ng") {
+        let _ = std::process::Command::new("espeak-ng")
+            .args(["-s", &espeak_rate, &cleaned])
+            .spawn();
+        return Ok(());
+    }
+
+    Err("TTS unavailable: install spd-say or espeak-ng".to_string())
+}
+
+#[tauri::command]
+pub fn stop_speech() -> Result<(), String> {
+    let _ = std::process::Command::new("pkill").args(["-f", "spd-say"]).output();
+    let _ = std::process::Command::new("pkill").args(["-f", "espeak-ng"]).output();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn start_recording() -> Result<(), String> {
+    let mut guard = RECORDING_CHILD.lock().unwrap();
+    if let Some(mut child) = guard.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    let child = std::process::Command::new("arecord")
+        .args(["-f", "S16_LE", "-r", "16000", "-c", "1", "/tmp/lcd-recording.wav"])
+        .spawn()
+        .map_err(|e| format!("Failed to start recording (install arecord): {e}"))?;
+    *guard = Some(child);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stop_recording_and_transcribe(model_path: String) -> Result<String, String> {
+    {
+        let mut guard = RECORDING_CHILD.lock().unwrap();
+        if let Some(mut child) = guard.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    let whisper_bin = if command_exists("whisper-cli") { "whisper-cli" } else { "whisper" };
+
+    let output = std::process::Command::new(whisper_bin)
+        .args(["-m", &model_path, "-f", "/tmp/lcd-recording.wav", "--output-txt", "--no-prints"])
+        .output()
+        .map_err(|e| format!("Transcription failed (install whisper.cpp): {e}"))?;
+
+    let _ = std::fs::remove_file("/tmp/lcd-recording.wav");
+
+    // whisper writes a .txt sidecar file
+    let txt_path = "/tmp/lcd-recording.wav.txt";
+    if let Ok(text) = std::fs::read_to_string(txt_path) {
+        let _ = std::fs::remove_file(txt_path);
+        return Ok(text.trim().to_string());
+    }
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }

@@ -39,6 +39,13 @@
   let importUrl = $state("");
   let importingUrl = $state(false);
 
+  // Voice
+  let ttsEnabled = $state(false);
+  let ttsRate = $state(100);
+  let sttEnabled = $state(false);
+  let whisperModelPath = $state("");
+  let isRecording = $state(false);
+
   // Context window limits by model/provider
   function getContextLimit(model, provider) {
     if (!model) return 128000;
@@ -225,6 +232,36 @@
     } catch (e) { /* non-critical */ }
   }
 
+  async function loadVoiceSettings() {
+    try {
+      ttsEnabled = await invoke("get_tts_enabled");
+      ttsRate = await invoke("get_tts_rate");
+      sttEnabled = await invoke("get_stt_enabled");
+      whisperModelPath = await invoke("get_whisper_model_path");
+    } catch (_) {}
+  }
+
+  async function toggleRecording() {
+    if (isRecording) {
+      isRecording = false;
+      try {
+        const transcript = await invoke("stop_recording_and_transcribe", { modelPath: whisperModelPath });
+        if (transcript) {
+          inputText += (inputText ? " " : "") + transcript;
+        }
+      } catch (e) {
+        console.error("Transcription error:", e);
+      }
+    } else {
+      try {
+        await invoke("start_recording");
+        isRecording = true;
+      } catch (e) {
+        console.error("Recording error:", e);
+      }
+    }
+  }
+
   async function handleUrlImport() {
     if (!importUrl.trim()) return;
     importingUrl = true;
@@ -330,6 +367,8 @@
   }
 
   onMount(() => {
+    loadVoiceSettings();
+
     const unlistenUsage = listen("token-usage", () => {
       loadTokenUsage();
       loadConversationCost();
@@ -348,6 +387,14 @@
       } else if (eventType === "done") {
         isStreaming = false;
         streamingMessageId = null;
+
+        // Auto-TTS when enabled
+        if (ttsEnabled) {
+          const lastMsg = messages.find(m => m.id === message_id);
+          if (lastMsg?.content) {
+            invoke("speak_text", { text: lastMsg.content, rate: ttsRate }).catch(() => {});
+          }
+        }
 
         // Agent mode: auto-continue if response contains [CONTINUE]
         if (agentMode && agentRunning) {
@@ -839,6 +886,8 @@ Be thorough in each step. Do not skip steps or combine them.`;
           onFork={conversationId ? handleFork : null}
           onPreviewArtifact={handlePreviewArtifact}
           onRetry={message.retryContent ? () => retryMessage(message) : null}
+          {ttsEnabled}
+          {ttsRate}
         />
       {/each}
     </div>
@@ -917,6 +966,24 @@ Be thorough in each step. Do not skip steps or combine them.`;
           <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
         </svg>
       </button>
+      {#if sttEnabled}
+        <button
+          class="attach-btn"
+          class:recording={isRecording}
+          onclick={toggleRecording}
+          disabled={isStreaming}
+          title={isRecording ? "Stop recording and transcribe" : "Start voice input"}
+          aria-label={isRecording ? "Stop recording" : "Start voice input"}
+          aria-pressed={isRecording}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+      {/if}
       <textarea
         bind:this={chatInput}
         bind:value={inputText}
@@ -1379,6 +1446,17 @@ Be thorough in each step. Do not skip steps or combine them.`;
   .agent-active {
     color: var(--accent) !important;
     background: rgba(78, 204, 163, 0.15);
+  }
+
+  .recording {
+    color: var(--danger) !important;
+    background: rgba(233, 69, 96, 0.15);
+    animation: pulse-mic 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-mic {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
 
   .agent-progress {

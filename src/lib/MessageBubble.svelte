@@ -3,9 +3,10 @@
   import hljs from "./highlight.js";
   import katex from "katex";
   import "katex/dist/katex.min.css";
+  import { invoke } from "@tauri-apps/api/core";
   import { tick } from "svelte";
 
-  let { role, content, isStreaming, onEdit, onRegenerate, onFork, messageId, onPreviewArtifact, onRetry } = $props();
+  let { role, content, isStreaming, onEdit, onRegenerate, onFork, messageId, onPreviewArtifact, onRetry, ttsEnabled = false, ttsRate = 100 } = $props();
   let messageEl;
   let isEditing = $state(false);
   let editText = $state("");
@@ -223,6 +224,15 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/>
               <path d="M6 9v6c0 1.66 1.34 3 3 3h3"/><line x1="18" y1="9" x2="18" y2="15"/>
+            </svg>
+          </button>
+        {/if}
+        {#if role === "assistant" && ttsEnabled}
+          <button class="action-btn" onclick={() => invoke("speak_text", { text: content, rate: ttsRate })} title="Read aloud" aria-label="Read message aloud">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
             </svg>
           </button>
         {/if}

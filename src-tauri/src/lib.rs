@@ -182,6 +182,14 @@ pub fn run() {
             db::set_reduce_motion,
             db::get_high_contrast,
             db::set_high_contrast,
+            db::get_tts_enabled,
+            db::set_tts_enabled,
+            db::get_tts_rate,
+            db::set_tts_rate,
+            db::get_stt_enabled,
+            db::set_stt_enabled,
+            db::get_whisper_model_path,
+            db::set_whisper_model_path,
             db::get_system_prompt,
             db::set_system_prompt,
             db::get_mcp_servers,
@@ -265,6 +273,12 @@ pub fn run() {
             db::delete_file_watch,
             api::send_comparison,
             api::import_url,
+            api::check_tts_available,
+            api::check_stt_available,
+            api::speak_text,
+            api::stop_speech,
+            api::start_recording,
+            api::stop_recording_and_transcribe,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
