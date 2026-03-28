@@ -63,7 +63,7 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 - **~10MB** binary (vs ~150-500MB for Electron-based alternatives)
 - **Native WebKitGTK** rendering (no bundled Chromium)
 - **Low memory footprint** (~30-40MB idle vs ~200-300MB for Electron apps)
-- **Multi-provider** — Anthropic, OpenAI, Ollama (local models)
+- **Multi-provider** — Anthropic, OpenAI, Ollama (local models), custom endpoints
 - **Your API key, your data** — everything stays local on your machine
 
 ## How Does It Compare?
@@ -74,12 +74,16 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 | **Binary size** | ~10 MB | ~200 MB | ~200 MB | ~100 MB | ~500 MB |
 | **RAM (idle)** | ~30-40 MB | ~200+ MB | ~200+ MB | ~150+ MB | ~300+ MB |
 | **Linux native** | Yes | No | Unofficial port | Yes | Yes |
-| **Multi-provider** | Anthropic, OpenAI, Ollama | Claude only | Claude only | Multi | Multi |
+| **Multi-provider** | Anthropic, OpenAI, Ollama, Custom | Claude only | Claude only | Multi | Multi |
 | **MCP support** | Yes | Yes | Yes | No | Yes |
 | **Artifacts** | Yes (6 renderers) | Yes | Yes | No | No |
+| **Computer use** | Planned (Phase 12) | macOS only | No | No | No |
+| **Desktop Extensions** | Planned (Phase 12) | Yes | No | No | No |
 | **Open source** | MIT | No | Scripts only | GPLv3 | Apache 2.0 |
 | **Offline mode** | Yes (queue + retry) | No | No | No | Yes (local models) |
 | **Custom themes** | Yes (CSS + presets) | No | No | No | No |
+| **Voice TTS/STT** | Yes (spd-say + whisper) | macOS only | No | No | No |
+| **Accessibility** | Full (WCAG, high contrast) | Partial | Partial | No | No |
 | **Desktop integration** | Global hotkey, tray, DBus, URI handler | Tray | Tray | Tray | Tray |
 
 **LCD is purpose-built for Linux** — not an Electron wrapper or a repackaged Windows app. It uses your system's WebKitGTK for rendering, keeping the binary small and memory usage low.
@@ -87,31 +91,38 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 ## Features
 
 - Streaming chat responses in real-time
-- Conversation management (create, rename, delete)
+- Conversation management (create, rename, delete, fork)
 - Persistent conversation history (SQLite)
-- Multi-provider: Anthropic (Claude), OpenAI, Ollama (local models)
-- Model selection per provider
-- Markdown rendering with syntax-highlighted code blocks
-- Copy button on code blocks
+- Multi-provider: Anthropic (Claude), OpenAI-compatible APIs, Ollama (local models), custom endpoints
+- Model selection per provider; side-by-side model comparison with response grading
+- Cost estimation per conversation with per-model pricing
+- Markdown rendering with syntax-highlighted code blocks (copy button, artifact preview)
 - AI-generated conversation titles
 - Search/filter conversations
-- Custom system prompts
-- Image upload with Claude Vision API
+- Custom system prompts; prompt library with variable placeholders
+- Custom slash commands (run shell scripts from chat)
+- Image upload with Claude Vision API; drag-and-drop and clipboard paste
+- Screenshot-to-Claude (capture screen region and attach to message)
 - Edit messages and regenerate responses
-- Light and dark theme
+- Light and dark theme; custom CSS with presets (Nord, Solarized, Monokai, Dracula)
 - System tray integration (minimize to tray)
 - LaTeX/math rendering (KaTeX)
-- Keyboard shortcuts (Ctrl+N, Ctrl+K, Ctrl+,, Ctrl+L)
+- Keyboard shortcuts (Ctrl+N, Ctrl+K, Ctrl+,, Ctrl+L, Ctrl+P, and more)
+- Global hotkey (Super+Shift+C) and quick-ask overlay (Super+Shift+Q)
 - Stop generation mid-stream
 - Local API key storage
-- Custom CSS themes with presets (Nord, Solarized, Monokai, Dracula)
-- Prompt library for reusable templates
-- Custom slash commands (run shell scripts from chat)
-- Artifacts (sandboxed HTML/SVG preview)
+- Artifacts panel (6 renderers: HTML, SVG, React, Mermaid, Markdown, Code) with live editing, versioning, and export
 - MCP (Model Context Protocol) tool use
-- Project folders with persistent context
+- Project folders with persistent context and per-project settings
+- Knowledge base (manual, URL import, file watcher)
+- Conversation memory (persistent facts injected into system prompt)
 - Export conversations (Markdown/JSON)
-- Auto-update notifications
+- Offline mode (queue messages, auto-retry on reconnect)
+- Agent mode (multi-step autonomous task execution)
+- Scheduled/recurring prompts
+- Auto-update notifications with in-app download and install
+- Accessibility: keyboard navigation, high contrast theme, adjustable font size, reduce motion
+- Text-to-speech output (`spd-say`/`espeak-ng`) and speech-to-text input (`arecord` + `whisper.cpp`)
 
 ## Quick Start
 
@@ -298,28 +309,43 @@ linux-claude-desktop/
 - [x] Local knowledge base (manual, URL, or file import; project-scoped; enable/disable)
 - [x] File watcher (auto-update knowledge entries when watched files change)
 
-### Phase 10 — Multi-Model & Comparison :white_check_mark:
+### Phase 10 — Multi-Model & Comparison ✅
+
 - [x] Side-by-side model comparison (same prompt to multiple models)
 - [x] Model routing rules (auto-select model based on task type)
 - [x] Response grading/ranking (rate responses to track model quality)
 - [x] Custom model endpoints (add arbitrary OpenAI-compatible providers)
 - [x] Cost estimation per conversation (based on model pricing)
 
-### Phase 11 — Voice & Accessibility
-- [ ] Speech-to-text input (system mic via PipeWire/PulseAudio)
-- [ ] Text-to-speech output for responses
-- [ ] Screen reader support (ARIA landmarks, live regions)
-- [ ] High contrast and large text themes
-- [ ] Full keyboard-only navigation audit
+### Phase 11 — Voice & Accessibility ✅
 
-### Phase 12 — Terminal & Developer Tools
+- [x] Screen reader support (ARIA landmarks, live regions, `aria-modal`, skip-link)
+- [x] Keyboard-only navigation (`:focus-visible` ring, full focus audit)
+- [x] High contrast theme (`[data-theme="high-contrast"]`) + auto `prefers-contrast`
+- [x] Adjustable font size (11–20px slider, persisted)
+- [x] Reduce motion toggle + auto `prefers-reduced-motion`
+- [x] Text-to-speech output (`spd-say` / `espeak-ng`, rate control, per-message button)
+- [x] Speech-to-text input (`arecord` + `whisper.cpp`, mic button in toolbar)
+
+### Phase 12 — Computer Use & Desktop Extensions
+
+- [ ] Computer use — Claude controls the Linux desktop (click, type, scroll) via xdotool/ydotool + AT-SPI
+- [ ] Screen-aware context — attach live screenshot of any window to the current prompt
+- [ ] Desktop Extensions — one-click MCP server install (`.mcpb`-style packages, no JSON editing)
+- [ ] Extensions directory UI — browse, install, configure, and update MCP servers from within the app
+- [ ] Secure credential storage for extension secrets (libsecret / GNOME Keyring)
+- [ ] Computer use safety guardrails — confirmation dialogs for destructive actions, allow/deny lists
+
+### Phase 13 — Terminal & Developer Tools
+
 - [ ] Embedded terminal panel (run commands Claude suggests)
 - [ ] Code execution sandbox (run Python/JS snippets in artifacts)
 - [ ] Git integration (view diffs, stage changes, commit from chat)
 - [ ] Project scaffolding (generate project structures from descriptions)
 - [ ] LSP integration (type checking and linting in artifact editor)
 
-### Phase 13 — Plugin System
+### Phase 14 — Plugin System
+
 - [ ] Plugin API (JavaScript/TypeScript plugin interface)
 - [ ] Plugin marketplace / registry
 - [ ] Custom renderers via plugins (extend artifact types)
