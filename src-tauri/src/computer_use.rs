@@ -7,6 +7,8 @@ use tauri::Emitter;
 static CU_STOP_FLAG: AtomicBool = AtomicBool::new(false);
 
 const MAX_ITERATIONS: u32 = 30;
+const COMPUTER_USE_TOOL_TYPE: &str = "computer_20250124";
+const COMPUTER_USE_BETA_HEADER: &str = "computer-use-2025-01-24";
 
 // ── Events ────────────────────────────────────────────────────────────────────
 
@@ -247,7 +249,7 @@ pub async fn run_computer_use(
             "model": cu_model,
             "max_tokens": 4096,
             "tools": [{
-                "type": "computer_20250124",
+                "type": COMPUTER_USE_TOOL_TYPE,
                 "name": "computer",
                 "display_width_px": width,
                 "display_height_px": height,
@@ -259,7 +261,7 @@ pub async fn run_computer_use(
         let resp = client.post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &api_key)
             .header("anthropic-version", "2023-06-01")
-            .header("anthropic-beta", "computer-use-2025-01-24")
+            .header("anthropic-beta", COMPUTER_USE_BETA_HEADER)
             .json(&body)
             .send().await
             .map_err(|e| e.to_string())?;
