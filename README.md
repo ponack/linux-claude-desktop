@@ -21,7 +21,7 @@
 ---
 
 <p align="center">
-  <img src="assets/LCD-demo.gif" alt="Linux Claude Desktop demo" width="700" />
+  <img src="gifs/v0.9.1-01-chat-stream.gif" alt="Linux Claude Desktop — chat" width="700" />
 </p>
 <p align="center"><em>Streaming chat with syntax highlighting, markdown rendering, and artifacts</em></p>
 
@@ -30,39 +30,63 @@
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/01-chat.png" alt="Chat view" width="700" />
+  <img src="screenshots/v0.9.1-01-chat.png" alt="Chat view" width="700" />
 </p>
 <p align="center"><em>Streaming chat with markdown rendering, syntax highlighting, and conversation sidebar</em></p>
 
 <p align="center">
-  <img src="screenshots/02-sidebar.png" alt="Sidebar" width="700" />
+  <img src="screenshots/v0.9.1-02-settings-general.png" alt="Settings — General" width="700" />
 </p>
-<p align="center"><em>Conversation history with search, project folders, and quick navigation</em></p>
+<p align="center"><em>Settings — provider, model, system prompt, MCP servers, and more</em></p>
 
 <p align="center">
-  <img src="screenshots/03-settings.png" alt="Settings — General" width="700" />
+  <img src="screenshots/v0.9.1-03-settings-appearance.png" alt="Settings — Appearance" width="700" />
 </p>
-<p align="center"><em>Tabbed settings — provider, model, system prompt, MCP servers, voice, and accessibility</em></p>
+<p align="center"><em>Appearance — themes, custom CSS, and display options</em></p>
 
 <p align="center">
-  <img src="screenshots/06-comparison.png" alt="Model comparison" width="700" />
+  <img src="screenshots/v0.9.1-04-settings-accessibility.png" alt="Settings — Accessibility" width="700" />
+</p>
+<p align="center"><em>Accessibility — font size, high contrast, reduce motion, TTS and STT</em></p>
+
+<p align="center">
+  <img src="screenshots/v0.9.1-05-comparison.png" alt="Model comparison" width="700" />
 </p>
 <p align="center"><em>Side-by-side model comparison with response grading</em></p>
 
 <p align="center">
-  <img src="screenshots/07-computer-use.png" alt="Computer Use" width="700" />
+  <img src="screenshots/v0.9.1-06-computer-use.png" alt="Computer Use" width="700" />
 </p>
 <p align="center"><em>Computer Use — Claude controls your desktop with live screenshot feedback</em></p>
 
 <p align="center">
-  <img src="screenshots/08-extensions.png" alt="Desktop Extensions" width="700" />
+  <img src="screenshots/v0.9.1-07-extensions.png" alt="Desktop Extensions" width="700" />
 </p>
 <p align="center"><em>Desktop Extensions — one-click install for popular MCP servers</em></p>
 
 <p align="center">
-  <img src="screenshots/10-command-palette.png" alt="Command palette" width="700" />
+  <img src="screenshots/v0.9.1-09-command-palette.png" alt="Command palette" width="700" />
 </p>
 <p align="center"><em>Command palette (Ctrl+P) — jump to any conversation, view, or action</em></p>
+
+---
+
+## In Action
+
+<p align="center">
+  <img src="gifs/v0.9.1-02-theme-switch.gif" alt="Theme switching" width="700" />
+</p>
+<p align="center"><em>Theme switching — Appearance settings with live preview</em></p>
+
+<p align="center">
+  <img src="gifs/v0.9.1-03-command-palette.gif" alt="Command palette" width="700" />
+</p>
+<p align="center"><em>Command palette (Ctrl+P) — fuzzy search across all commands and conversations</em></p>
+
+<p align="center">
+  <img src="gifs/v0.9.1-04-comparison.gif" alt="Model comparison" width="700" />
+</p>
+<p align="center"><em>Side-by-side model comparison</em></p>
 
 ---
 
