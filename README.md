@@ -30,29 +30,39 @@
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/empty-state-light.png" alt="Welcome screen (light theme)" width="700" />
+  <img src="screenshots/01-chat.png" alt="Chat view" width="700" />
 </p>
-<p align="center"><em>Welcome screen — light theme with conversation history</em></p>
+<p align="center"><em>Streaming chat with markdown rendering, syntax highlighting, and conversation sidebar</em></p>
 
 <p align="center">
-  <img src="screenshots/empty-state-dark.png" alt="Welcome screen (dark theme)" width="700" />
+  <img src="screenshots/02-sidebar.png" alt="Sidebar" width="700" />
 </p>
-<p align="center"><em>Welcome screen — dark theme</em></p>
+<p align="center"><em>Conversation history with search, project folders, and quick navigation</em></p>
 
 <p align="center">
-  <img src="screenshots/sidebar.png" alt="Chat conversation" width="700" />
+  <img src="screenshots/03-settings.png" alt="Settings — General" width="700" />
 </p>
-<p align="center"><em>Chat with markdown rendering and conversation sidebar</em></p>
+<p align="center"><em>Tabbed settings — provider, model, system prompt, MCP servers, voice, and accessibility</em></p>
 
 <p align="center">
-  <img src="screenshots/settings.png" alt="Settings — General" width="700" />
+  <img src="screenshots/06-comparison.png" alt="Model comparison" width="700" />
 </p>
-<p align="center"><em>Tabbed settings with auto-save — provider, model, and system prompt</em></p>
+<p align="center"><em>Side-by-side model comparison with response grading</em></p>
 
 <p align="center">
-  <img src="screenshots/themes.png" alt="Settings — Appearance" width="700" />
+  <img src="screenshots/07-computer-use.png" alt="Computer Use" width="700" />
 </p>
-<p align="center"><em>Appearance settings — theme, color schemes, and custom CSS</em></p>
+<p align="center"><em>Computer Use — Claude controls your desktop with live screenshot feedback</em></p>
+
+<p align="center">
+  <img src="screenshots/08-extensions.png" alt="Desktop Extensions" width="700" />
+</p>
+<p align="center"><em>Desktop Extensions — one-click install for popular MCP servers</em></p>
+
+<p align="center">
+  <img src="screenshots/10-command-palette.png" alt="Command palette" width="700" />
+</p>
+<p align="center"><em>Command palette (Ctrl+P) — jump to any conversation, view, or action</em></p>
 
 ---
 
@@ -77,8 +87,8 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 | **Multi-provider** | Anthropic, OpenAI, Ollama, Custom | Claude only | Claude only | Multi | Multi |
 | **MCP support** | Yes | Yes | Yes | No | Yes |
 | **Artifacts** | Yes (6 renderers) | Yes | Yes | No | No |
-| **Computer use** | Planned (Phase 12) | macOS only | No | No | No |
-| **Desktop Extensions** | Planned (Phase 12) | Yes | No | No | No |
+| **Computer use** | Yes (xdotool + scrot) | macOS only | No | No | No |
+| **Desktop Extensions** | Yes (12 MCP servers) | Yes | No | No | No |
 | **Open source** | MIT | No | Scripts only | GPLv3 | Apache 2.0 |
 | **Offline mode** | Yes (queue + retry) | No | No | No | Yes (local models) |
 | **Custom themes** | Yes (CSS + presets) | No | No | No | No |
@@ -327,14 +337,15 @@ linux-claude-desktop/
 - [x] Text-to-speech output (`spd-say` / `espeak-ng`, rate control, per-message button)
 - [x] Speech-to-text input (`arecord` + `whisper.cpp`, mic button in toolbar)
 
-### Phase 12 — Computer Use & Desktop Extensions
+### Phase 12 — Computer Use & Desktop Extensions ✅
 
-- [ ] Computer use — Claude controls the Linux desktop (click, type, scroll) via xdotool/ydotool + AT-SPI
-- [ ] Screen-aware context — attach live screenshot of any window to the current prompt
-- [ ] Desktop Extensions — one-click MCP server install (`.mcpb`-style packages, no JSON editing)
-- [ ] Extensions directory UI — browse, install, configure, and update MCP servers from within the app
-- [ ] Secure credential storage for extension secrets (libsecret / GNOME Keyring)
-- [ ] Computer use safety guardrails — confirmation dialogs for destructive actions, allow/deny lists
+- [x] Computer Use — Claude controls the Linux desktop (click, type, scroll, drag) via xdotool + scrot
+- [x] Agentic loop with live screenshot feedback and streaming action log (up to 30 iterations)
+- [x] Computer Use model selector (Opus/Sonnet/Haiku) with availability check
+- [x] Desktop Extensions catalog — 12 curated MCP servers with one-click install (no JSON editing)
+- [x] Extensions install dialog — guided API key / path collection per server
+- [x] Installed/Remove badges, Node.js availability check, toast feedback
+- [x] `Ctrl+Shift+U` (Computer Use) and `Ctrl+Shift+E` (Extensions) shortcuts
 
 ### Phase 13 — Terminal & Developer Tools
 
