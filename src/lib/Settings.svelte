@@ -19,6 +19,7 @@
     { id: "knowledge", label: "Knowledge", icon: "M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" },
     { id: "data", label: "Data & Usage", icon: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M12 3v12 M8 11l4 4 4-4" },
     { id: "accessibility", label: "Accessibility", icon: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z M12 9a3 3 0 100 6 3 3 0 000-6z" },
+    { id: "computeruse", label: "Computer Use", icon: "M2 3h20v14H2z M8 21h8M12 17v4" },
     { id: "about", label: "About", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 16v-4 M12 8h.01" },
   ];
 
@@ -50,6 +51,10 @@
   let whisperModelPath = $state("");
   let ttsAvailable = $state(false);
   let sttAvailable = $state(false);
+
+  // Computer Use settings
+  let cuModel = $state("claude-opus-4-6");
+  let cuAvailability = $state(null);
 
   // Status
   let saveStatus = $state(""); // "", "saving", "saved", "error"
@@ -212,6 +217,8 @@
         whisperModelPath = await invoke("get_whisper_model_path");
         ttsAvailable = await invoke("check_tts_available");
         sttAvailable = await invoke("check_stt_available");
+        cuModel = await invoke("get_cu_model");
+        cuAvailability = await invoke("check_computer_use_available");
       } catch (_) {}
 
       try {
@@ -585,6 +592,7 @@
   async function saveTtsRate() { await invoke("set_tts_rate", { rate: ttsRate }); }
   async function saveSttEnabled() { await invoke("set_stt_enabled", { enabled: sttEnabled }); }
   async function saveWhisperModelPath() { await invoke("set_whisper_model_path", { path: whisperModelPath }); }
+  async function saveCuModel() { await invoke("set_cu_model", { model: cuModel }); }
 
   function formatInterval(ms) {
     if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
@@ -1429,6 +1437,54 @@
               style="width: 100%;" />
             <p class="hint">Path to a whisper.cpp GGML model file. Download from <a href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">HuggingFace</a>.</p>
           </div>
+        </div>
+      </div>
+
+    {:else if activeSection === "computeruse"}
+      <div class="section">
+        <h3>Computer Use</h3>
+        <p class="section-hint">Let Claude control your Linux desktop — click, type, and take screenshots to complete tasks autonomously. Open the Computer Use view from the sidebar or with <kbd>Ctrl+Shift+U</kbd>.</p>
+
+        {#if cuAvailability && !cuAvailability.available}
+          <div class="card" style="border-color: var(--danger); background: rgba(233,69,96,0.06);">
+            <p style="font-size:13px; color: var(--danger); margin:0 0 8px;">Setup required to use Computer Use:</p>
+            {#if !cuAvailability.xdotool}
+              <p class="hint"><code>sudo apt install xdotool</code> — mouse &amp; keyboard control</p>
+            {/if}
+            {#if !cuAvailability.screenshot}
+              <p class="hint"><code>sudo apt install scrot</code> — fullscreen screenshot</p>
+            {/if}
+          </div>
+        {:else if cuAvailability}
+          <div class="card">
+            <div class="about-row">
+              <span class="about-label">Status</span>
+              <span class="about-value" style="color: var(--success);">Ready</span>
+            </div>
+          </div>
+        {/if}
+
+        <h3>Model</h3>
+        <div class="card">
+          <div class="field">
+            <label for="cu-model">Claude model for computer use tasks</label>
+            <select id="cu-model" bind:value={cuModel} onchange={saveCuModel}>
+              <option value="claude-opus-4-6">claude-opus-4-6 (recommended)</option>
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6 (faster)</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5 (fastest)</option>
+            </select>
+            <p class="hint">Opus gives the most reliable results for complex UI tasks. Sonnet is a good balance of speed and accuracy.</p>
+          </div>
+        </div>
+
+        <h3>Safety Notes</h3>
+        <div class="card">
+          <ul style="font-size:13px; color: var(--text-secondary); padding-left:18px; line-height:1.8; margin:0;">
+            <li>Claude can click, type, and interact with any visible application.</li>
+            <li>Tasks run up to 30 iterations — use the Stop button to interrupt at any time.</li>
+            <li>Avoid leaving sensitive data (passwords, private documents) on screen during a task.</li>
+            <li>Screen content is sent to Anthropic's API as screenshots.</li>
+          </ul>
         </div>
       </div>
 

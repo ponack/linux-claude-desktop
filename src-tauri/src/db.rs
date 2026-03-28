@@ -1534,6 +1534,18 @@ pub fn set_high_contrast(state: tauri::State<AppState>, enabled: bool) -> Result
 }
 
 #[tauri::command]
+pub fn get_cu_model(state: tauri::State<AppState>) -> Result<String, String> {
+    state.db.lock().unwrap()
+        .get_setting("cu_model").map_err(|e| e.to_string())
+        .map(|v| v.unwrap_or_else(|| "claude-opus-4-6".to_string()))
+}
+
+#[tauri::command]
+pub fn set_cu_model(state: tauri::State<AppState>, model: String) -> Result<(), String> {
+    state.db.lock().unwrap().set_setting("cu_model", &model).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn get_tts_enabled(state: tauri::State<AppState>) -> Result<bool, String> {
     let v = state.db.lock().unwrap()
         .get_setting("tts_enabled").map_err(|e| e.to_string())?.unwrap_or_default();

@@ -56,7 +56,7 @@ pub struct Attachment {
     data: Option<String>,
 }
 
-fn encode_file_to_base64(path: &str) -> Result<String, String> {
+pub fn encode_file_to_base64(path: &str) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
     Ok(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
 }

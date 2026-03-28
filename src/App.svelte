@@ -9,6 +9,7 @@
   import Chat from "./lib/Chat.svelte";
   import Settings from "./lib/Settings.svelte";
   import ComparisonView from "./lib/ComparisonView.svelte";
+  import ComputerUseView from "./lib/ComputerUseView.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
 
   let currentView = $state("chat");
@@ -146,6 +147,14 @@
     currentView = "chat";
   }
 
+  function openComputerUse() {
+    currentView = "computer-use";
+  }
+
+  function closeComputerUse() {
+    currentView = "chat";
+  }
+
   function handleGlobalKeydown(e) {
     // Ctrl+N: New chat
     if (e.ctrlKey && e.key === "n") {
@@ -169,6 +178,13 @@
       e.preventDefault();
       if (currentView === "compare") closeComparison();
       else openComparison();
+      return;
+    }
+    // Ctrl+Shift+U: Toggle computer use
+    if (e.ctrlKey && e.shiftKey && e.key === "U") {
+      e.preventDefault();
+      if (currentView === "computer-use") closeComputerUse();
+      else openComputerUse();
       return;
     }
     // Ctrl+L: Focus chat input
@@ -204,16 +220,19 @@
     {onNewChat}
     {openSettings}
     {openComparison}
+    {openComputerUse}
     onBackToChat={onNewChat}
     {currentView}
     refreshKey={sidebarRefresh}
-    collapsed={currentView === "settings" || currentView === "compare"}
+    collapsed={currentView === "settings" || currentView === "compare" || currentView === "computer-use"}
   />
   <main id="main-content" class="main-content">
     {#if currentView === "settings"}
       <Settings onClose={closeSettings} />
     {:else if currentView === "compare"}
       <ComparisonView onClose={closeComparison} />
+    {:else if currentView === "computer-use"}
+      <ComputerUseView onClose={closeComputerUse} />
     {:else}
       <Chat
         conversationId={activeConversationId}

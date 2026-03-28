@@ -1,4 +1,5 @@
 mod api;
+mod computer_use;
 mod db;
 mod dbus_service;
 mod mcp;
@@ -182,6 +183,8 @@ pub fn run() {
             db::set_reduce_motion,
             db::get_high_contrast,
             db::set_high_contrast,
+            db::get_cu_model,
+            db::set_cu_model,
             db::get_tts_enabled,
             db::set_tts_enabled,
             db::get_tts_rate,
@@ -273,6 +276,9 @@ pub fn run() {
             db::delete_file_watch,
             api::send_comparison,
             api::import_url,
+            computer_use::check_computer_use_available,
+            computer_use::run_computer_use,
+            computer_use::stop_computer_use,
             api::check_tts_available,
             api::check_stt_available,
             api::speak_text,
