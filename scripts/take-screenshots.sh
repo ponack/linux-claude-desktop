@@ -49,25 +49,28 @@ nav_y() { echo $(( NAV_Y0 + $1 * NAV_STEP )); }
 # ─── Version from tauri.conf.json ─────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONF="$SCRIPT_DIR/../src-tauri/tauri.conf.json"
-VERSION=$(grep '"version"' "$CONF" | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
+VERSION=$(grep -m1 '"version"' "$CONF" | sed 's/.*"version": *"\([^"]*\)".*/\1/')
 PREFIX="v${VERSION}-"
 echo "Version: $VERSION"
 
 # ─── Previous version management ──────────────────────────────────────────────
+archive_to_previous() {
+  local files=("$@")
+  mkdir -p "$OUT/previous"
+  rm -f "$OUT/previous/"*.png
+  mv "${files[@]}" "$OUT/previous/"
+}
+
 mkdir -p "$OUT"
 shopt -s nullglob
 current=("$OUT/${PREFIX}"*.png)
 any_versioned=("$OUT"/v*.png)
 if [[ ${#current[@]} -gt 0 ]]; then
   echo "→ Archiving existing v${VERSION} screenshots to ${OUT}/previous/"
-  mkdir -p "$OUT/previous"
-  rm -f "$OUT/previous/"*.png
-  mv "${current[@]}" "$OUT/previous/"
+  archive_to_previous "${current[@]}"
 elif [[ ${#any_versioned[@]} -gt 0 ]]; then
   echo "→ Archiving previous version screenshots to ${OUT}/previous/"
-  mkdir -p "$OUT/previous"
-  rm -f "$OUT/previous/"*.png
-  mv "${any_versioned[@]}" "$OUT/previous/"
+  archive_to_previous "${any_versioned[@]}"
 fi
 shopt -u nullglob
 echo "Screenshots → $(realpath "$OUT")/${PREFIX}*.png"
