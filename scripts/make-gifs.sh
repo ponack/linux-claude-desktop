@@ -35,7 +35,15 @@ MAX_COLORS=128      # GIF palette size (max 256)
 DELAY_VIEW=0.9
 DELAY_DIALOG=0.6
 
-# ─── Settings nav layout (shared with take-screenshots.sh) ────────────────────
+# ─── Sidebar button positions (shared with take-screenshots.sh) ───────────────
+SB_X=28
+SB_CHAT_Y=638
+SB_COMPUTERUSE_Y=676
+SB_COMPARE_Y=714
+SB_EXTENSIONS_Y=752
+SB_SETTINGS_Y=790
+
+# ─── Settings nav layout ──────────────────────────────────────────────────────
 NAV_X=156
 NAV_Y0=80
 NAV_STEP=36
@@ -193,9 +201,7 @@ record_scene() {
 # ─── Scene definitions ────────────────────────────────────────────────────────
 
 scene_chat_stream() {
-  key "Escape"
-  sleep 0.2
-  key "ctrl+n"
+  win_click "$SB_X" "$SB_CHAT_Y"   # click Chat sidebar button (also focuses WebView)
   sleep 0.5
   # Click the message input (centred at bottom of chat area)
   win_click 760 750
@@ -207,9 +213,9 @@ scene_chat_stream() {
 }
 
 scene_theme_switch() {
-  key "ctrl+comma"
+  win_click "$SB_X" "$SB_SETTINGS_Y"   # open Settings
   sleep "$DELAY_VIEW"
-  win_click "$NAV_X" "$(nav_y 1)"   # Appearance
+  win_click "$NAV_X" "$(nav_y 1)"      # Appearance
   sleep "$DELAY_VIEW"
   # Click Light theme option (first theme card / left column)
   # Theme grid: padding ~20px, card ~160px wide, first card centre x ~100 (offset from content area x=56)
@@ -218,15 +224,13 @@ scene_theme_switch() {
   # Click back to default dark theme (second card)
   win_click 336 300
   sleep 0.5
-  key "Escape"
+  win_click "$SB_X" "$SB_CHAT_Y"   # return to chat
 }
 
 scene_command_palette() {
-  key "Escape"
-  sleep 0.2
-  key "ctrl+n"
+  win_click "$SB_X" "$SB_CHAT_Y"   # go to chat + focus WebView
   sleep 0.3
-  key "ctrl+p"
+  key "ctrl+p"                      # WebView is focused from the click above
   sleep "$DELAY_DIALOG"
   type_text "new chat"
   sleep 0.6
@@ -234,11 +238,9 @@ scene_command_palette() {
 }
 
 scene_comparison() {
-  key "Escape"
-  sleep 0.3
-  key "ctrl+shift+m"
+  win_click "$SB_X" "$SB_COMPARE_Y"
   sleep "$DELAY_VIEW"
-  # Brief scroll to show both model panels are live
+  # Brief click to show both model panels are live
   win_click 640 400
   sleep 0.5
 }

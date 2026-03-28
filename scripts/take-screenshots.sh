@@ -30,19 +30,29 @@ DELAY_VIEW=0.9      # after switching views
 DELAY_DIALOG=0.6    # after opening dialogs/modals
 DELAY_LAUNCH=3.5    # waiting for app to appear (used if you launch via APP_BIN below)
 
+# ─── Sidebar button positions (collapsed = 56px wide, button centre x=28) ─────
+# Footer buttons (from bottom): 12px padding + 36px buttons + 2px margin-bottom
+#   Settings=790, Extensions=752, Compare=714, ComputerUse=676, Chat=638
+# ── Tune if buttons shift (e.g. update banner shown) ──
+SB_X=28
+SB_CHAT_Y=638
+SB_COMPUTERUSE_Y=676
+SB_COMPARE_Y=714
+SB_EXTENSIONS_Y=752
+SB_SETTINGS_Y=790
+
 # ─── Settings nav layout (derived from CSS) ───────────────────────────────────
-# Sidebar collapsed width: 56px  →  Settings nav starts at x=56
-# Settings nav width: 200px      →  nav centre x = 56+100 = 156
-# Nav padding-top: 16px, header: ~46px  →  items start at y=62
-# Each nav item: ~36px tall (8px padding × 2 + ~18px line + 2px gap)
+# Settings panel starts at x=56 (sidebar) + 200px nav → content at x=256
+# Nav centre x = 56 + 100 = 156
+# Each nav item: ~36px tall, first item (General) centre-y ≈ 80
 #
 # Section order (index → label):
 #  0=General  1=Appearance  2=Prompts  3=Projects  4=Integrations
 #  5=Schedules  6=Endpoints  7=Routing  8=Knowledge  9=Data & Usage
 #  10=Accessibility  11=Computer Use  12=About
 NAV_X=156
-NAV_Y0=80      # centre-y of item 0 (General)
-NAV_STEP=36    # pixels per item
+NAV_Y0=80
+NAV_STEP=36
 
 nav_y() { echo $(( NAV_Y0 + $1 * NAV_STEP )); }
 
@@ -135,16 +145,14 @@ echo "Capturing…"
 
 # ─── 01: Chat ─────────────────────────────────────────────────────────────────
 echo "  → 01 Chat"
-key "Escape"            # close any open view
-sleep 0.2
-key "ctrl+n"            # new chat
+win_click "$SB_X" "$SB_CHAT_Y"   # click Chat in sidebar (also gives WebView focus)
 sleep 0.3
 snap "01-chat.png"
 
 # ─── 02: Settings → General ───────────────────────────────────────────────────
 echo "  → 02 Settings > General"
-key "ctrl+comma"
-# General is the default active tab — no click needed
+win_click "$SB_X" "$SB_SETTINGS_Y"   # click Settings gear in sidebar
+# General is the default active tab — no further click needed
 snap "02-settings-general.png"
 
 # ─── 03: Settings → Appearance ────────────────────────────────────────────────
@@ -159,23 +167,17 @@ snap "04-settings-accessibility.png"
 
 # ─── 05: Comparison view ──────────────────────────────────────────────────────
 echo "  → 05 Comparison"
-key "Escape"
-sleep 0.3
-key "ctrl+shift+m"
+win_click "$SB_X" "$SB_COMPARE_Y"
 snap "05-comparison.png"
 
 # ─── 06: Computer Use ─────────────────────────────────────────────────────────
 echo "  → 06 Computer Use"
-key "Escape"
-sleep 0.3
-key "ctrl+shift+u"
+win_click "$SB_X" "$SB_COMPUTERUSE_Y"
 snap "06-computer-use.png"
 
 # ─── 07: Extensions catalog ───────────────────────────────────────────────────
 echo "  → 07 Extensions"
-key "Escape"
-sleep 0.3
-key "ctrl+shift+e"
+win_click "$SB_X" "$SB_EXTENSIONS_Y"
 snap "07-extensions.png"
 
 # ─── 08: Extensions install dialog (GitHub card) ─────────────────────────────
@@ -192,15 +194,13 @@ echo "  → 08 Extensions install dialog"
 win_click "$INSTALL_BTN_X" "$INSTALL_BTN_Y"
 sleep "$DELAY_DIALOG"
 snap "08-extensions-install.png"
-key "Escape"   # close dialog
+key "Escape"   # close dialog — WebView already focused from prior win_click
 
 # ─── 09: Command palette ──────────────────────────────────────────────────────
 echo "  → 09 Command palette"
-key "Escape"
-sleep 0.3
-key "ctrl+n"
+win_click "$SB_X" "$SB_CHAT_Y"   # go to chat + focus WebView
 sleep 0.2
-key "ctrl+p"
+key "ctrl+p"                      # WebView is focused, shortcut fires reliably
 sleep "$DELAY_DIALOG"
 snap "09-command-palette.png"
 key "Escape"
