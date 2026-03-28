@@ -88,17 +88,22 @@ get_wid() {
 }
 
 # Click at coordinates relative to the app window (avoids screen-position guessing)
+focus_win() {
+  xdotool windowraise "$WID"
+  xdotool windowfocus --sync "$WID"
+}
+
 win_click() {
   local rel_x=$1 rel_y=$2
-  xdotool windowactivate --sync "$WID"
+  focus_win
   xdotool mousemove --window "$WID" "$rel_x" "$rel_y"
   sleep 0.1
   xdotool click 1
 }
 
-# windowactivate ensures the WebView processes the shortcut (key --window alone is unreliable)
+# Raise + focus before every key so the WebView processes the shortcut
 key() {
-  xdotool windowactivate --sync "$WID"
+  focus_win
   xdotool key "$@"
 }
 
