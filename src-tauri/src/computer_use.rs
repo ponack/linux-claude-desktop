@@ -217,7 +217,7 @@ pub async fn run_computer_use(
     let cu_model = {
         let db = state.db.lock().unwrap();
         db.get_setting("cu_model").map_err(|e| e.to_string())?
-            .unwrap_or_else(|| "claude-opus-4-6".to_string())
+            .unwrap_or_else(|| "claude-3-7-sonnet-20250219".to_string())
     };
 
     let (width, height) = screen_size();

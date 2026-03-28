@@ -31,18 +31,17 @@ DELAY_DIALOG=0.6    # after opening dialogs/modals
 DELAY_LAUNCH=3.5    # waiting for app to appear (used if you launch via APP_BIN below)
 
 # ─── Settings nav layout (derived from CSS) ───────────────────────────────────
-# Sidebar collapsed width: 56px  →  Settings nav starts at x=56
-# Settings nav width: 200px      →  nav centre x = 56+100 = 156
-# Nav padding-top: 16px, header: ~46px  →  items start at y=62
-# Each nav item: ~36px tall (8px padding × 2 + ~18px line + 2px gap)
+# Settings panel starts at x=56 (sidebar) + 200px nav → content at x=256
+# Nav centre x = 56 + 100 = 156
+# Each nav item: ~36px tall, first item (General) centre-y ≈ 80
 #
 # Section order (index → label):
 #  0=General  1=Appearance  2=Prompts  3=Projects  4=Integrations
 #  5=Schedules  6=Endpoints  7=Routing  8=Knowledge  9=Data & Usage
 #  10=Accessibility  11=Computer Use  12=About
 NAV_X=156
-NAV_Y0=80      # centre-y of item 0 (General)
-NAV_STEP=36    # pixels per item
+NAV_Y0=80
+NAV_STEP=36
 
 nav_y() { echo $(( NAV_Y0 + $1 * NAV_STEP )); }
 
@@ -87,15 +86,25 @@ get_wid() {
   echo ""
 }
 
-# Click at coordinates relative to the app window (avoids screen-position guessing)
 win_click() {
   local rel_x=$1 rel_y=$2
+  xdotool windowraise "$WID"
+  xdotool windowfocus --sync "$WID"
   xdotool mousemove --window "$WID" "$rel_x" "$rel_y"
   sleep 0.1
   xdotool click 1
+  sleep 0.1
 }
 
-key() { xdotool key --window "$WID" "$@"; }
+# Click the sidebar logo area — safe, non-interactive, always visible regardless of view.
+# Clicking this gives the WebView mouse-click focus so subsequent xdotool key events land.
+focus_webview() {
+  win_click 28 26
+}
+
+# Send a key shortcut. Caller must call focus_webview (or any win_click) first —
+# re-running windowfocus here would reset the click-focus the WebView just acquired.
+key() { xdotool key "$@"; }
 
 snap() {
   local name="${PREFIX}${1}"
@@ -125,16 +134,17 @@ echo "Capturing…"
 
 # ─── 01: Chat ─────────────────────────────────────────────────────────────────
 echo "  → 01 Chat"
-key "Escape"            # close any open view
+focus_webview
+key "Escape"     # close any open view (noop if already in chat)
 sleep 0.2
-key "ctrl+n"            # new chat
+key "ctrl+n"     # new chat
 sleep 0.3
 snap "01-chat.png"
 
 # ─── 02: Settings → General ───────────────────────────────────────────────────
 echo "  → 02 Settings > General"
+focus_webview
 key "ctrl+comma"
-# General is the default active tab — no click needed
 snap "02-settings-general.png"
 
 # ─── 03: Settings → Appearance ────────────────────────────────────────────────
@@ -149,22 +159,19 @@ snap "04-settings-accessibility.png"
 
 # ─── 05: Comparison view ──────────────────────────────────────────────────────
 echo "  → 05 Comparison"
-key "Escape"
-sleep 0.3
+focus_webview
 key "ctrl+shift+m"
 snap "05-comparison.png"
 
 # ─── 06: Computer Use ─────────────────────────────────────────────────────────
 echo "  → 06 Computer Use"
-key "Escape"
-sleep 0.3
+focus_webview
 key "ctrl+shift+u"
 snap "06-computer-use.png"
 
 # ─── 07: Extensions catalog ───────────────────────────────────────────────────
 echo "  → 07 Extensions"
-key "Escape"
-sleep 0.3
+focus_webview
 key "ctrl+shift+e"
 snap "07-extensions.png"
 
@@ -186,9 +193,8 @@ key "Escape"   # close dialog
 
 # ─── 09: Command palette ──────────────────────────────────────────────────────
 echo "  → 09 Command palette"
+focus_webview
 key "Escape"
-sleep 0.3
-key "ctrl+n"
 sleep 0.2
 key "ctrl+p"
 sleep "$DELAY_DIALOG"

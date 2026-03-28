@@ -53,7 +53,7 @@
   let sttAvailable = $state(false);
 
   // Computer Use settings
-  let cuModel = $state("claude-opus-4-6");
+  let cuModel = $state("claude-3-7-sonnet-20250219");
   let cuAvailability = $state(null);
 
   // Status
@@ -1469,11 +1469,10 @@
           <div class="field">
             <label for="cu-model">Claude model for computer use tasks</label>
             <select id="cu-model" bind:value={cuModel} onchange={saveCuModel}>
-              <option value="claude-opus-4-6">claude-opus-4-6 (recommended)</option>
-              <option value="claude-sonnet-4-6">claude-sonnet-4-6 (faster)</option>
-              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5 (fastest)</option>
+              <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet (recommended)</option>
+              <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet (older)</option>
             </select>
-            <p class="hint">Opus gives the most reliable results for complex UI tasks. Sonnet is a good balance of speed and accuracy.</p>
+            <p class="hint">Computer use requires Claude 3.x models — Claude 4.x does not support the computer use API. claude-3-7-sonnet gives the best results for complex UI tasks.</p>
           </div>
         </div>
 
