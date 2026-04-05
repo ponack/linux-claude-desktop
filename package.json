@@ -27,7 +27,7 @@
     "highlight.js": "^11.11.1",
     "katex": "^0.16.40",
     "marked": "^17.0.5",
-    "mermaid": "^11.13.0"
+    "mermaid": "^11.14.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
