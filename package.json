@@ -34,6 +34,6 @@
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/cli": "^2.0.0",
     "svelte": "^5.54.1",
-    "vite": "^8.0.1"
+    "vite": "^8.0.5"
   }
 }
