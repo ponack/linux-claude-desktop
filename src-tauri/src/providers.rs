@@ -41,14 +41,13 @@ impl ProviderType {
 }
 
 /// Resolved provider config for sending a message
-#[allow(dead_code)]
 pub struct ResolvedProvider {
     pub provider_type: ProviderType,
     pub api_key: String,
     pub base_url: String,
     pub model: String,
-    pub api_format: String, // "anthropic" or "openai" — determines which streaming function to use
-    pub endpoint_id: Option<String>, // for custom endpoints
+    pub api_format: String,
+    pub endpoint_id: Option<String>,
 }
 
 /// Fetch available models from an Ollama instance

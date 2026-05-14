@@ -11,6 +11,7 @@
   import ComparisonView from "./lib/ComparisonView.svelte";
   import ComputerUseView from "./lib/ComputerUseView.svelte";
   import ExtensionsView from "./lib/ExtensionsView.svelte";
+  import TerminalView from "./lib/TerminalView.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
 
   let currentView = $state("chat");
@@ -164,6 +165,14 @@
     currentView = "chat";
   }
 
+  function openTerminal() {
+    currentView = "terminal";
+  }
+
+  function closeTerminal() {
+    currentView = "chat";
+  }
+
   function handleGlobalKeydown(e) {
     // Ctrl+N: New chat
     if (e.ctrlKey && e.key === "n") {
@@ -203,6 +212,13 @@
       else openExtensions();
       return;
     }
+    // Ctrl+Shift+T: Toggle terminal
+    if (e.ctrlKey && e.shiftKey && e.key === "T") {
+      e.preventDefault();
+      if (currentView === "terminal") closeTerminal();
+      else openTerminal();
+      return;
+    }
     // Ctrl+L: Focus chat input
     if (e.ctrlKey && e.key === "l") {
       e.preventDefault();
@@ -215,7 +231,7 @@
       const search = document.querySelector(".search-box input");
       if (search) search.focus();
     }
-    // Escape: Close palette, settings, extensions, computer use, or clear search
+    // Escape: Close palette, settings, extensions, computer use, terminal, or clear search
     if (e.key === "Escape") {
       if (showCommandPalette) {
         showCommandPalette = false;
@@ -225,6 +241,8 @@
         closeComputerUse();
       } else if (currentView === "extensions") {
         closeExtensions();
+      } else if (currentView === "terminal") {
+        closeTerminal();
       }
     }
   }
@@ -242,10 +260,11 @@
     {openComparison}
     {openComputerUse}
     {openExtensions}
+    {openTerminal}
     onBackToChat={onNewChat}
     {currentView}
     refreshKey={sidebarRefresh}
-    collapsed={currentView === "settings" || currentView === "compare" || currentView === "computer-use" || currentView === "extensions"}
+    collapsed={currentView === "settings" || currentView === "compare" || currentView === "computer-use" || currentView === "extensions" || currentView === "terminal"}
   />
   <main id="main-content" class="main-content">
     {#if currentView === "settings"}
@@ -256,6 +275,11 @@
       <ComputerUseView onClose={closeComputerUse} />
     {:else if currentView === "extensions"}
       <ExtensionsView onClose={closeExtensions} />
+    {:else if currentView === "terminal"}
+      <TerminalView
+        onClose={closeTerminal}
+        onSendToChat={(text) => { deepLinkText = text; currentView = "chat"; }}
+      />
     {:else}
       <Chat
         conversationId={activeConversationId}
