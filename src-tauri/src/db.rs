@@ -384,6 +384,17 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_artifacts_conversation ON artifacts(conversation_id);"
         ).ok();
 
+        // Migration: Phase 13 — Git repos
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS git_repos (
+                id TEXT PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                last_opened TEXT,
+                created_at TEXT NOT NULL
+            );"
+        ).ok();
+
         Ok(Self { conn })
     }
 
@@ -1284,6 +1295,47 @@ impl Database {
         )?;
         Ok(())
     }
+
+    // --- Git repos ---
+
+    pub fn list_git_repos(&self) -> Result<Vec<GitRepo>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, path, name, last_opened, created_at FROM git_repos ORDER BY last_opened DESC NULLS LAST, created_at DESC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(GitRepo {
+                id: row.get(0)?,
+                path: row.get(1)?,
+                name: row.get(2)?,
+                last_opened: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn upsert_git_repo(&self, id: &str, path: &str, name: &str, now: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "INSERT INTO git_repos (id, path, name, last_opened, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?4)
+             ON CONFLICT(path) DO UPDATE SET name = excluded.name, last_opened = excluded.last_opened",
+            params![id, path, name, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn touch_git_repo(&self, path: &str, now: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "UPDATE git_repos SET last_opened = ?1 WHERE path = ?2",
+            params![now, path],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_git_repo(&self, id: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute("DELETE FROM git_repos WHERE id = ?1", params![id])?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1391,6 +1443,15 @@ pub struct FileWatch {
     pub file_path: String,
     pub knowledge_id: String,
     pub last_modified: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GitRepo {
+    pub id: String,
+    pub path: String,
+    pub name: String,
+    pub last_opened: Option<String>,
     pub created_at: String,
 }
 
@@ -2327,4 +2388,49 @@ pub fn get_file_watches(state: tauri::State<AppState>) -> Result<Vec<FileWatch>,
 #[tauri::command]
 pub fn delete_file_watch(state: tauri::State<AppState>, id: String) -> Result<(), String> {
     state.db.lock().unwrap().delete_file_watch(&id).map_err(|e| e.to_string())
+}
+
+// --- Git Repos ---
+
+#[tauri::command]
+pub fn get_git_repos(state: tauri::State<AppState>) -> Result<Vec<GitRepo>, String> {
+    state.db.lock().unwrap().list_git_repos().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn add_git_repo(state: tauri::State<AppState>, path: String, name: String) -> Result<GitRepo, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    let db = state.db.lock().unwrap();
+    db.upsert_git_repo(&id, &path, &name, &now).map_err(|e| e.to_string())?;
+    // Return the newly upserted record
+    db.list_git_repos()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|r| r.path == path)
+        .ok_or_else(|| "Repo not found after insert".to_string())
+}
+
+#[tauri::command]
+pub fn remove_git_repo(state: tauri::State<AppState>, id: String) -> Result<(), String> {
+    state.db.lock().unwrap().delete_git_repo(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn touch_git_repo(state: tauri::State<AppState>, path: String) -> Result<(), String> {
+    let now = chrono::Utc::now().to_rfc3339();
+    state.db.lock().unwrap().touch_git_repo(&path, &now).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_git_default_repo(state: tauri::State<AppState>) -> Result<String, String> {
+    state.db.lock().unwrap()
+        .get_setting("git_default_repo")
+        .map_err(|e| e.to_string())
+        .map(|v| v.unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn set_git_default_repo(state: tauri::State<AppState>, path: String) -> Result<(), String> {
+    state.db.lock().unwrap().set_setting("git_default_repo", &path).map_err(|e| e.to_string())
 }

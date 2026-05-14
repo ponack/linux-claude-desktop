@@ -12,6 +12,7 @@
   import ComputerUseView from "./lib/ComputerUseView.svelte";
   import ExtensionsView from "./lib/ExtensionsView.svelte";
   import TerminalView from "./lib/TerminalView.svelte";
+  import GitView from "./lib/GitView.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
 
   let currentView = $state("chat");
@@ -173,6 +174,14 @@
     currentView = "chat";
   }
 
+  function openGit() {
+    currentView = "git";
+  }
+
+  function closeGit() {
+    currentView = "chat";
+  }
+
   function handleGlobalKeydown(e) {
     // Ctrl+N: New chat
     if (e.ctrlKey && e.key === "n") {
@@ -219,6 +228,13 @@
       else openTerminal();
       return;
     }
+    // Ctrl+Shift+G: Toggle git
+    if (e.ctrlKey && e.shiftKey && e.key === "G") {
+      e.preventDefault();
+      if (currentView === "git") closeGit();
+      else openGit();
+      return;
+    }
     // Ctrl+L: Focus chat input
     if (e.ctrlKey && e.key === "l") {
       e.preventDefault();
@@ -243,6 +259,8 @@
         closeExtensions();
       } else if (currentView === "terminal") {
         closeTerminal();
+      } else if (currentView === "git") {
+        closeGit();
       }
     }
   }
@@ -261,10 +279,11 @@
     {openComputerUse}
     {openExtensions}
     {openTerminal}
+    {openGit}
     onBackToChat={onNewChat}
     {currentView}
     refreshKey={sidebarRefresh}
-    collapsed={currentView === "settings" || currentView === "compare" || currentView === "computer-use" || currentView === "extensions" || currentView === "terminal"}
+    collapsed={currentView === "settings" || currentView === "compare" || currentView === "computer-use" || currentView === "extensions" || currentView === "terminal" || currentView === "git"}
   />
   <main id="main-content" class="main-content">
     {#if currentView === "settings"}
@@ -278,6 +297,11 @@
     {:else if currentView === "terminal"}
       <TerminalView
         onClose={closeTerminal}
+        onSendToChat={(text) => { deepLinkText = text; currentView = "chat"; }}
+      />
+    {:else if currentView === "git"}
+      <GitView
+        onClose={closeGit}
         onSendToChat={(text) => { deepLinkText = text; currentView = "chat"; }}
       />
     {:else}

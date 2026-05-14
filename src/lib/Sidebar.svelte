@@ -3,7 +3,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
 
-  let { activeConversationId, onSelect, onNewChat, openSettings, openComparison, openComputerUse, openExtensions, openTerminal, onBackToChat, currentView = "chat", refreshKey, collapsed = false } = $props();
+  let { activeConversationId, onSelect, onNewChat, openSettings, openComparison, openComputerUse, openExtensions, openTerminal, openGit, onBackToChat, currentView = "chat", refreshKey, collapsed = false } = $props();
 
   let conversations = $state([]);
   let searchQuery = $state("");
@@ -260,6 +260,19 @@
         <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
       </svg>
       {#if !collapsed}<span>Terminal</span>{/if}
+    </button>
+    <button
+      class="nav-btn"
+      class:active={currentView === "git"}
+      onclick={openGit}
+      aria-label="Git"
+      title="Git (Ctrl+Shift+G)"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+        <path d="M6 9v6M15.4 6.4A8 8 0 0 1 21 13v2"/>
+      </svg>
+      {#if !collapsed}<span>Git</span>{/if}
     </button>
     <button
       class="nav-btn"
