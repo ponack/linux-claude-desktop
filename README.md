@@ -212,7 +212,7 @@ linux-claude-desktop
 
 ### Prerequisites
 
-- **Node.js** >= 18
+- **Node.js** >= 22 (Vite 8 requires `^20.19.0 || >=22.12.0`; recommend 22 LTS)
 - **Rust** (install via [rustup](https://rustup.rs/))
 - **System libraries** (see distro-specific commands above, or for Ubuntu/Debian):
 
