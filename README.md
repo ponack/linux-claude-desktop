@@ -113,6 +113,9 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 | **Artifacts** | Yes (6 renderers) | Yes | Yes | No | No |
 | **Computer use** | Yes (xdotool + scrot) | macOS only | No | No | No |
 | **Desktop Extensions** | Yes (12 MCP servers) | Yes | No | No | No |
+| **Embedded terminal** | Yes (PTY shell) | No | No | No | No |
+| **Code execution** | Yes (Python/JS/Bash/Ruby) | No | No | No | No |
+| **Git panel** | Yes (status/diff/commit) | No | No | No | No |
 | **Open source** | MIT | No | Scripts only | GPLv3 | Apache 2.0 |
 | **Offline mode** | Yes (queue + retry) | No | No | No | Yes (local models) |
 | **Custom themes** | Yes (CSS + presets) | No | No | No | No |
@@ -157,6 +160,9 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 - Auto-update notifications with in-app download and install
 - Accessibility: keyboard navigation, high contrast theme, adjustable font size, reduce motion
 - Text-to-speech output (`spd-say`/`espeak-ng`) and speech-to-text input (`arecord` + `whisper.cpp`)
+- Embedded terminal (`Ctrl+Shift+T`) — real PTY shell (bash/zsh) with "Send to Claude" selection
+- Inline code execution — run Python/JS/Bash/Ruby snippets from chat code blocks with output panel
+- Git panel (`Ctrl+Shift+G`) — staged/unstaged files, diff viewer, commit/push/pull, "Ask Claude" to send diff to chat
 
 ## Quick Start
 
@@ -371,13 +377,11 @@ linux-claude-desktop/
 - [x] Installed/Remove badges, Node.js availability check, toast feedback
 - [x] `Ctrl+Shift+U` (Computer Use) and `Ctrl+Shift+E` (Extensions) shortcuts
 
-### Phase 13 — Terminal & Developer Tools
+### Phase 13 — Terminal & Developer Tools ✅
 
-- [ ] Embedded terminal panel (run commands Claude suggests)
-- [ ] Code execution sandbox (run Python/JS snippets in artifacts)
-- [ ] Git integration (view diffs, stage changes, commit from chat)
-- [ ] Project scaffolding (generate project structures from descriptions)
-- [ ] LSP integration (type checking and linting in artifact editor)
+- [x] Embedded terminal panel (`Ctrl+Shift+T`) — full PTY shell (bash/zsh) powered by portable-pty and xterm.js, with "Send to Claude" selection
+- [x] Code execution sandbox — run Python/JS/Bash/Ruby snippets inline from chat code blocks, with stdout/stderr/timeout output panel
+- [x] Git integration (`Ctrl+Shift+G`) — staged/unstaged file list, per-file diff viewer, stage/unstage, commit, push/pull, recent repo picker, "Ask Claude" to send diff to chat
 
 ### Phase 14 — Plugin System
 
