@@ -20,6 +20,7 @@
     { id: "data", label: "Data & Usage", icon: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M12 3v12 M8 11l4 4 4-4" },
     { id: "accessibility", label: "Accessibility", icon: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z M12 9a3 3 0 100 6 3 3 0 000-6z" },
     { id: "computeruse", label: "Computer Use", icon: "M2 3h20v14H2z M8 21h8M12 17v4" },
+    { id: "git", label: "Git", icon: "M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 9v6M15.4 6.4A8 8 0 0 1 21 13v2" },
     { id: "about", label: "About", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 16v-4 M12 8h.01" },
   ];
 
@@ -55,6 +56,10 @@
   // Computer Use settings
   let cuModel = $state("claude-3-7-sonnet-20250219");
   let cuAvailability = $state(null);
+
+  // Git settings
+  let gitDefaultRepo = $state("");
+  let gitAvailability = $state(null);
 
   // Status
   let saveStatus = $state(""); // "", "saving", "saved", "error"
@@ -219,6 +224,8 @@
         sttAvailable = await invoke("check_stt_available");
         cuModel = await invoke("get_cu_model");
         cuAvailability = await invoke("check_computer_use_available");
+        gitDefaultRepo = await invoke("get_git_default_repo").catch(() => "");
+        gitAvailability = await invoke("check_git_available").catch(() => null);
       } catch (_) {}
 
       try {
@@ -593,6 +600,7 @@
   async function saveSttEnabled() { await invoke("set_stt_enabled", { enabled: sttEnabled }); }
   async function saveWhisperModelPath() { await invoke("set_whisper_model_path", { path: whisperModelPath }); }
   async function saveCuModel() { await invoke("set_cu_model", { model: cuModel }); }
+  async function saveGitDefaultRepo() { await invoke("set_git_default_repo", { path: gitDefaultRepo }); }
 
   function formatInterval(ms) {
     if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
@@ -1485,6 +1493,47 @@
             <li>Screen content is sent to Anthropic's API as screenshots.</li>
           </ul>
         </div>
+      </div>
+
+    {:else if activeSection === "git"}
+      <div class="section">
+        <h3>Git</h3>
+
+        {#if gitAvailability && !gitAvailability.available}
+          <div class="card">
+            <p style="color: var(--danger)">git is not installed. Run <code>sudo apt install git</code> to enable Git features.</p>
+          </div>
+        {:else}
+          {#if gitAvailability}
+            <div class="card" style="margin-bottom: 16px;">
+              <p style="font-size: 13px; color: var(--text-muted);">{gitAvailability.version}</p>
+            </div>
+          {/if}
+          <div class="card">
+            <div class="setting-row">
+              <label for="git-default-repo" class="setting-label">Default Repository</label>
+              <div class="setting-control" style="flex-direction: row; gap: 8px;">
+                <input
+                  id="git-default-repo"
+                  type="text"
+                  class="text-input"
+                  placeholder="/home/user/my-project"
+                  bind:value={gitDefaultRepo}
+                  onchange={saveGitDefaultRepo}
+                  style="flex: 1;"
+                />
+                <button
+                  class="btn-secondary"
+                  onclick={async () => {
+                    const selected = await openDialog({ directory: true, title: "Select Default Git Repository" });
+                    if (selected) { gitDefaultRepo = selected; await saveGitDefaultRepo(); }
+                  }}
+                >Browse</button>
+              </div>
+              <p class="setting-description">The repository opened by default when you launch the Git view (Ctrl+Shift+G).</p>
+            </div>
+          </div>
+        {/if}
       </div>
 
     {:else if activeSection === "about"}

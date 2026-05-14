@@ -3,6 +3,7 @@ mod computer_use;
 mod db;
 mod dbus_service;
 mod executor;
+mod git;
 mod mcp;
 mod providers;
 mod terminal;
@@ -297,6 +298,22 @@ pub fn run() {
             terminal::send_terminal_input,
             terminal::resize_terminal,
             terminal::close_terminal,
+            git::check_git_available,
+            git::git_repo_info,
+            git::git_status,
+            git::git_log,
+            git::git_diff,
+            git::git_stage,
+            git::git_unstage,
+            git::git_commit,
+            git::git_push,
+            git::git_pull,
+            db::get_git_repos,
+            db::add_git_repo,
+            db::remove_git_repo,
+            db::touch_git_repo,
+            db::get_git_default_repo,
+            db::set_git_default_repo,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
