@@ -96,6 +96,20 @@
     "yaml", "toml", "xml",
   ];
 
+  const RUNNABLE_LANGS = new Set([
+    "python", "python3", "py",
+    "javascript", "js", "node",
+    "bash", "sh",
+    "ruby", "rb",
+  ]);
+
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
   function detectLanguage(block) {
     const code = block.querySelector("code");
     if (!code) return null;
@@ -153,6 +167,61 @@
           onPreviewArtifact({ code: codeText, language: lang || "text" });
         });
         block.appendChild(previewBtn);
+      }
+
+      // Add "▶ Run" button for executable languages
+      if (lang && RUNNABLE_LANGS.has(lang.toLowerCase())) {
+        const hasPreviewBtn = !!block.querySelector(".preview-btn");
+        const runBtn = document.createElement("button");
+        runBtn.className = "run-btn";
+        runBtn.type = "button";
+        runBtn.setAttribute("aria-label", "Run code");
+        runBtn.textContent = "▶ Run";
+        runBtn.style.right = hasPreviewBtn ? "116px" : "60px";
+
+        let outputEl = null;
+
+        runBtn.addEventListener("click", async () => {
+          runBtn.textContent = "Running…";
+          runBtn.disabled = true;
+
+          if (!outputEl) {
+            outputEl = document.createElement("div");
+            outputEl.className = "code-output";
+            block.parentNode.insertBefore(outputEl, block.nextSibling);
+          }
+          outputEl.innerHTML = '<div class="output-running">Running…</div>';
+
+          try {
+            const result = await invoke("execute_code", {
+              language: lang,
+              code: codeText,
+              timeoutSecs: 30,
+            });
+
+            let html = "";
+            if (result.timed_out) {
+              html = `<div class="output-timeout">⏱ Timed out after 30s</div>`;
+            } else {
+              if (result.stdout)
+                html += `<pre class="output-stdout">${escapeHtml(result.stdout)}</pre>`;
+              if (result.stderr)
+                html += `<pre class="output-stderr">${escapeHtml(result.stderr)}</pre>`;
+              if (!result.stdout && !result.stderr)
+                html = `<div class="output-empty">No output</div>`;
+              if (result.exit_code !== 0)
+                html += `<div class="output-exit-code">exit ${result.exit_code}</div>`;
+            }
+            outputEl.innerHTML = html;
+          } catch (e) {
+            outputEl.innerHTML = `<pre class="output-stderr">${escapeHtml(String(e))}</pre>`;
+          }
+
+          runBtn.textContent = "▶ Run";
+          runBtn.disabled = false;
+        });
+
+        block.appendChild(runBtn);
       }
     }
   }
@@ -501,4 +570,70 @@
   .message-content :global(.hljs-symbol) { color: #c792ea; }
   .message-content :global(.hljs-bullet) { color: #c3e88d; }
   .message-content :global(.hljs-link) { color: #82aaff; }
+
+  .message-content :global(.run-btn) {
+    position: absolute;
+    top: 6px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    background: rgba(122, 162, 247, 0.15);
+    color: var(--accent);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .message-content :global(.run-btn:hover) {
+    background: rgba(122, 162, 247, 0.3);
+    color: white;
+  }
+
+  .message-content :global(.run-btn:disabled) {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .message-content :global(.code-output) {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    margin-top: -4px;
+    margin-bottom: 8px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 12px;
+  }
+
+  .message-content :global(.code-output pre) {
+    margin: 0;
+    padding: 10px 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .message-content :global(.output-stdout) {
+    color: var(--text-primary);
+  }
+
+  .message-content :global(.output-stderr) {
+    color: var(--danger);
+  }
+
+  .message-content :global(.output-running),
+  .message-content :global(.output-timeout),
+  .message-content :global(.output-empty) {
+    padding: 8px 12px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .message-content :global(.output-exit-code) {
+    padding: 2px 12px 8px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+  }
 </style>

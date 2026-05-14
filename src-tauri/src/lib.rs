@@ -2,6 +2,7 @@ mod api;
 mod computer_use;
 mod db;
 mod dbus_service;
+mod executor;
 mod mcp;
 mod providers;
 mod terminal;
@@ -289,6 +290,8 @@ pub fn run() {
             api::stop_speech,
             api::start_recording,
             api::stop_recording_and_transcribe,
+            executor::check_runtime_available,
+            executor::execute_code,
             terminal::check_terminal_available,
             terminal::spawn_terminal,
             terminal::send_terminal_input,
