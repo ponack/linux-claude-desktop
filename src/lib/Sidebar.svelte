@@ -3,7 +3,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
 
-  let { activeConversationId, onSelect, onNewChat, openSettings, openComparison, openComputerUse, openExtensions, onBackToChat, currentView = "chat", refreshKey, collapsed = false } = $props();
+  let { activeConversationId, onSelect, onNewChat, openSettings, openComparison, openComputerUse, openExtensions, openTerminal, onBackToChat, currentView = "chat", refreshKey, collapsed = false } = $props();
 
   let conversations = $state([]);
   let searchQuery = $state("");
@@ -248,6 +248,18 @@
         <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
       </svg>
       {#if !collapsed}<span>Extensions</span>{/if}
+    </button>
+    <button
+      class="nav-btn"
+      class:active={currentView === "terminal"}
+      onclick={openTerminal}
+      aria-label="Terminal"
+      title="Terminal (Ctrl+Shift+T)"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+      </svg>
+      {#if !collapsed}<span>Terminal</span>{/if}
     </button>
     <button
       class="nav-btn"

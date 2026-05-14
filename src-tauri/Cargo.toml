@@ -29,6 +29,7 @@ tauri-plugin-notification = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-deep-link = "2"
 zbus = "5"
+portable-pty = "0.8"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

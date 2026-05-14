@@ -4,10 +4,12 @@ mod db;
 mod dbus_service;
 mod mcp;
 mod providers;
+mod terminal;
 
 use chrono;
 use db::Database;
 use std::sync::Mutex;
+use terminal::TerminalState;
 use tauri::{
     Emitter,
     Manager,
@@ -32,6 +34,7 @@ pub fn run() {
         .manage(AppState {
             db: Mutex::new(db),
         })
+        .manage(TerminalState::new())
         .setup(|app| {
             let show = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -286,6 +289,11 @@ pub fn run() {
             api::stop_speech,
             api::start_recording,
             api::stop_recording_and_transcribe,
+            terminal::check_terminal_available,
+            terminal::spawn_terminal,
+            terminal::send_terminal_input,
+            terminal::resize_terminal,
+            terminal::close_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
