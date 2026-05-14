@@ -156,7 +156,7 @@
   let appOs = $state("");
 
   const anthropicModels = [
-    { id: "claude-opus-4-6", name: "Claude Opus 4.6 (Most capable)" },
+    { id: "claude-opus-4-7", name: "Claude Opus 4.7 (Most capable)" },
     { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (Balanced)" },
     { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5 (Fast)" },
   ];
