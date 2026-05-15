@@ -1,10 +1,10 @@
 {
   "id": "hello-world",
   "name": "Hello World",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Linux Claude Desktop",
-  "description": "A minimal plugin demonstrating activate/deactivate and the lcd console.",
+  "description": "Demonstrates registerCommand, storage, and notify.",
   "main": "index.js",
-  "permissions": [],
+  "permissions": ["commands", "storage", "notify"],
   "hooks": []
 }

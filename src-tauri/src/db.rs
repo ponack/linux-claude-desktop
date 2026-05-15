@@ -1370,6 +1370,51 @@ impl Database {
         )?;
         Ok(())
     }
+
+    // --- Plugin storage (per-plugin namespaced KV) ---
+
+    pub fn plugin_storage_get(&self, plugin_id: &str, key: &str) -> Result<Option<String>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT value FROM plugin_data WHERE plugin_id = ?1 AND key = ?2"
+        )?;
+        let rows = stmt.query_map(params![plugin_id, key], |row| row.get::<_, String>(0))?;
+        for r in rows { return Ok(Some(r?)); }
+        Ok(None)
+    }
+
+    pub fn plugin_storage_set(&self, plugin_id: &str, key: &str, value: &str) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO plugin_data (plugin_id, key, value, updated_at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(plugin_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+            params![plugin_id, key, value, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn plugin_storage_delete(&self, plugin_id: &str, key: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "DELETE FROM plugin_data WHERE plugin_id = ?1 AND key = ?2",
+            params![plugin_id, key],
+        )?;
+        Ok(())
+    }
+
+    pub fn plugin_storage_list_keys(&self, plugin_id: &str) -> Result<Vec<String>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT key FROM plugin_data WHERE plugin_id = ?1 ORDER BY key"
+        )?;
+        let rows = stmt.query_map(params![plugin_id], |row| row.get::<_, String>(0))?;
+        rows.collect()
+    }
+
+    pub fn plugin_storage_clear(&self, plugin_id: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "DELETE FROM plugin_data WHERE plugin_id = ?1",
+            params![plugin_id],
+        )?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -2467,4 +2512,31 @@ pub fn get_git_default_repo(state: tauri::State<AppState>) -> Result<String, Str
 #[tauri::command]
 pub fn set_git_default_repo(state: tauri::State<AppState>, path: String) -> Result<(), String> {
     state.db.lock().unwrap().set_setting("git_default_repo", &path).map_err(|e| e.to_string())
+}
+
+// --- Plugin storage (Phase 14 PR 2) ---
+
+#[tauri::command]
+pub fn plugin_storage_get(state: tauri::State<AppState>, plugin_id: String, key: String) -> Result<Option<String>, String> {
+    state.db.lock().unwrap().plugin_storage_get(&plugin_id, &key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn plugin_storage_set(state: tauri::State<AppState>, plugin_id: String, key: String, value: String) -> Result<(), String> {
+    state.db.lock().unwrap().plugin_storage_set(&plugin_id, &key, &value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn plugin_storage_delete(state: tauri::State<AppState>, plugin_id: String, key: String) -> Result<(), String> {
+    state.db.lock().unwrap().plugin_storage_delete(&plugin_id, &key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn plugin_storage_list_keys(state: tauri::State<AppState>, plugin_id: String) -> Result<Vec<String>, String> {
+    state.db.lock().unwrap().plugin_storage_list_keys(&plugin_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn plugin_storage_clear(state: tauri::State<AppState>, plugin_id: String) -> Result<(), String> {
+    state.db.lock().unwrap().plugin_storage_clear(&plugin_id).map_err(|e| e.to_string())
 }

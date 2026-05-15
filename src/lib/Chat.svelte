@@ -4,9 +4,10 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { open } from "@tauri-apps/plugin-dialog";
   import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
-  import { onMount, tick } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import MessageBubble from "./MessageBubble.svelte";
   import ArtifactPanel from "./ArtifactPanel.svelte";
+  import { getPluginCommands, onPluginCommandsChanged, runPluginCommand } from "./plugins.js";
 
   let { conversationId, onConversationCreated, deepLinkText = $bindable("") } = $props();
 
@@ -145,10 +146,18 @@
     loadMessages();
   });
 
+  onDestroy(() => {
+    if (unsubscribePluginCommands) {
+      unsubscribePluginCommands();
+      unsubscribePluginCommands = null;
+    }
+  });
+
   onMount(() => {
     loadProjects();
     loadPrompts();
     loadCustomCommands();
+    loadPluginCommands();
     loadActiveModel();
     if (chatInput) chatInput.focus();
 
@@ -297,6 +306,21 @@
     catch (e) { customCommands = []; }
   }
 
+  // Plugin slash commands (Phase 14 PR 2) — refreshed when plugins reload
+  let pluginCommandsList = $state([]);
+  let unsubscribePluginCommands = null;
+  function loadPluginCommands() {
+    try {
+      pluginCommandsList = getPluginCommands();
+      // Re-fetch whenever the plugin host activates/deactivates a plugin.
+      if (!unsubscribePluginCommands) {
+        unsubscribePluginCommands = onPluginCommandsChanged(() => {
+          pluginCommandsList = getPluginCommands();
+        });
+      }
+    } catch (e) { pluginCommandsList = []; }
+  }
+
   function insertPrompt(prompt) {
     showPromptPicker = false;
     const varPattern = /\{\{(\w+(?:\s+\w+)*)\}\}/g;
@@ -327,16 +351,34 @@
     promptVariableDialog = null;
   }
 
-  let filteredCommands = $derived(
-    inputText.startsWith("/")
-      ? customCommands.filter(c => c.name.toLowerCase().startsWith(inputText.slice(1).toLowerCase()))
-      : []
-  );
+  let filteredCommands = $derived.by(() => {
+    if (!inputText.startsWith("/")) return [];
+    const q = inputText.slice(1).toLowerCase();
+    const shell = customCommands
+      .filter((c) => c.name.toLowerCase().startsWith(q))
+      .map((c) => ({ source: "shell", name: c.name, description: c.description, command: c.command }));
+    const plugin = pluginCommandsList
+      .filter((c) => c.name.toLowerCase().startsWith(q))
+      .map((c) => ({ source: "plugin", name: c.name, description: c.description, pluginId: c.pluginId, pluginName: c.pluginName }));
+    return [...shell, ...plugin];
+  });
 
   async function executeCustomCommand(cmd) {
     showCommandPicker = false;
     inputText = "";
     try {
+      if (cmd.source === "plugin") {
+        const result = await runPluginCommand(cmd.pluginId, cmd.name);
+        // Plugin handlers can return a string to inject into the input,
+        // or { text, send } to optionally auto-send. Undefined = side-effect only.
+        if (typeof result === "string") {
+          inputText = result;
+        } else if (result && typeof result === "object") {
+          if (typeof result.text === "string") inputText = result.text;
+          if (result.send) await sendMessage();
+        }
+        return;
+      }
       const output = await invoke("run_custom_command", { command: cmd.command });
       inputText = `[Output of /${cmd.name}]:\n\`\`\`\n${output.trim()}\n\`\`\`\n\nPlease analyze the above output.`;
       await sendMessage();
@@ -920,6 +962,9 @@ Be thorough in each step. Do not skip steps or combine them.`;
         {#each filteredCommands as cmd}
           <button class="command-item" onclick={() => executeCustomCommand(cmd)}>
             <span class="cmd-name">/{cmd.name}</span>
+            {#if cmd.source === "plugin"}
+              <span class="cmd-badge">plugin · {cmd.pluginName}</span>
+            {/if}
             {#if cmd.description}<span class="cmd-desc">{cmd.description}</span>{/if}
           </button>
         {/each}
@@ -1364,6 +1409,16 @@ Be thorough in each step. Do not skip steps or combine them.`;
   .cmd-desc {
     font-size: 11px;
     color: var(--text-muted);
+  }
+
+  .cmd-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(122, 162, 247, 0.15);
+    color: var(--accent, #7aa2f7);
+    font-family: "JetBrains Mono", monospace;
+    margin-left: 6px;
   }
 
   .variable-overlay {

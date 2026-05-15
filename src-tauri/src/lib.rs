@@ -320,6 +320,11 @@ pub fn run() {
             plugins::read_plugin_source,
             plugins::set_plugin_enabled,
             plugins::open_plugins_folder,
+            db::plugin_storage_get,
+            db::plugin_storage_set,
+            db::plugin_storage_delete,
+            db::plugin_storage_list_keys,
+            db::plugin_storage_clear,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
