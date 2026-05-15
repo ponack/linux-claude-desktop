@@ -1,8 +1,8 @@
 # Linux Claude Desktop — Plugin Guide
 
-Plugins extend LCD with custom slash commands, persistent storage, notifications, event hooks, and (coming soon) custom artifact renderers. They are JavaScript ES modules that the app loads at startup.
+Plugins extend LCD with custom slash commands, persistent storage, notifications, event hooks, and custom artifact renderers. They are JavaScript ES modules that the app loads at startup.
 
-> **Phase 14 is shipping in stages.** This document reflects what's live today (PR 1 + PR 2 + PR 3). Sections marked _coming in PR N_ describe API that is not yet wired up.
+> **Phase 14 is complete.** Everything documented here is live as of v0.9.5+.
 
 ## Installing a plugin
 
@@ -53,6 +53,7 @@ Add the permission to the manifest's `permissions` array; otherwise the matching
 | `storage` | `lcd.storage.get/set/delete/list(...)` |
 | `notify` | `lcd.notify(...)` |
 | `invoke` | `lcd.invoke(name, args)` — limited to a whitelist |
+| `artifacts` | `lcd.registerArtifactType(...)` |
 
 `lcd.log` and the event bus (`on`/`off`/`emit`) require no permission.
 
@@ -93,6 +94,7 @@ export function deactivate() {
 | `lcd.storage.list()` | Return all keys this plugin has stored. | `storage` |
 | `lcd.notify(message, level?)` | Toast notification. `level` ∈ `info` (default), `success`, `warning`, `error`. | `notify` |
 | `lcd.invoke(name, args?)` | Call a whitelisted Tauri command. | `invoke` |
+| `lcd.registerArtifactType(name, { languages?, extensions?, mimeType?, render })` | Add a custom artifact renderer. See [Custom artifact renderers](#custom-artifact-renderers). | `artifacts` |
 
 ### `invoke` whitelist
 
@@ -132,10 +134,50 @@ Subscribe via `lcd.on(event, handler)`. Hooks fire in the order plugins are load
 
 If multiple plugins subscribe to the same event, they run in load order and each sees the previous handler's mutations.
 
-## Coming in later PRs
+## Custom artifact renderers
 
-- **PR 4 — Custom artifact renderers**
-  - `lcd.registerArtifactType(typeName, { mimeType, extensions, render(container, content, ctx) })`
+A plugin can render artifacts that the built-in renderers don't handle — `.excalidraw` diagrams, `.csv` tables, `.geojson` maps, anything you want.
+
+```js
+lcd.registerArtifactType("csv", {
+  languages: ["csv"],          // match against artifact.language
+  extensions: [".csv"],        // match against artifact.title suffix
+  mimeType: "text/csv",        // informational
+  render(container, content, ctx) {
+    // container — an empty div the plugin owns
+    // content   — the artifact text
+    // ctx       — { id, conversationId, language, title, artifactType }
+
+    const rows = content.split("\n").map((r) => r.split(","));
+    container.innerHTML =
+      "<table>" +
+      rows.map((cells) =>
+        "<tr>" + cells.map((c) => `<td>${c}</td>`).join("") + "</tr>"
+      ).join("") +
+      "</table>";
+
+    // Optional: return a cleanup function that runs on unmount or
+    // before re-rendering when content changes.
+    return () => { /* dispose listeners, intervals, etc. */ };
+  },
+});
+```
+
+### Match priority
+
+When the artifact panel decides which renderer to use, it walks every registered plugin renderer in this order. The first match wins:
+
+1. The renderer's `typeName` equals `artifact.artifact_type`
+2. `artifact.language` is in the renderer's `languages` array
+3. `artifact.title` ends with one of the renderer's `extensions`
+
+If no plugin matches, LCD falls back to its built-in renderers (Mermaid, Markdown, React, HTML/SVG, code).
+
+### Reactivity and cleanup
+
+The renderer is re-mounted whenever `content` or `ctx` changes. If your `render` returns a function, LCD calls it as a cleanup hook before each re-mount and on unmount — use it to dispose listeners, intervals, web workers, anything that would otherwise leak.
+
+Errors thrown inside `render` are caught and displayed inline in the artifact panel; they do not break the rest of the app.
 
 ## Security model
 

@@ -1,10 +1,10 @@
 {
   "id": "hello-world",
   "name": "Hello World",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Linux Claude Desktop",
-  "description": "Demonstrates registerCommand, storage, and notify.",
+  "description": "Demonstrates registerCommand, storage, notify, event hooks, and registerArtifactType.",
   "main": "index.js",
-  "permissions": ["commands", "storage", "notify"],
+  "permissions": ["commands", "storage", "notify", "artifacts"],
   "hooks": []
 }
