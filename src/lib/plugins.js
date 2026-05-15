@@ -26,7 +26,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { showToast } from "./toast.js";
 
-const HOST_VERSION = "0.9.4";
+const HOST_VERSION = "0.9.5";
 
 // Whitelist of Tauri commands a plugin may call via lcd.invoke().
 // Keep this conservative — every entry here is part of the public plugin API.
