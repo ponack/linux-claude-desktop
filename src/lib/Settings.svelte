@@ -161,6 +161,10 @@
   // Token Usage Analytics
   let totalUsage = $state(null);
 
+  // Export
+  let exportAllStatus = $state("");
+  let exportAllError = $state("");
+
   // Database
   let dbPath = $state("");
   let dbSize = $state(0);
@@ -328,6 +332,21 @@
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1048576).toFixed(1)} MB`;
+  }
+
+  async function exportAllConversations() {
+    exportAllStatus = ""; exportAllError = "";
+    try {
+      const dest = await saveDialog({
+        defaultPath: `conversations-${new Date().toISOString().slice(0, 10)}.zip`,
+        filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
+      });
+      if (!dest) return;
+      exportAllStatus = "exporting";
+      const result = await invoke("export_all_conversations_to_zip", { path: dest });
+      exportAllStatus = `exported:${result.count}`;
+      setTimeout(() => { if (exportAllStatus.startsWith("exported:")) exportAllStatus = ""; }, 4000);
+    } catch (e) { exportAllError = String(e); exportAllStatus = "error"; }
   }
 
   async function backupDatabase() {
@@ -1394,6 +1413,22 @@
             </div>
           </div>
         {/if}
+
+        <h3>Export Conversations</h3>
+        <div class="card">
+          <p class="field-desc">Export all conversations as individual JSON files in a ZIP archive.</p>
+          <div class="db-actions">
+            <button class="btn-action" onclick={exportAllConversations} disabled={exportAllStatus === "exporting"}>
+              {exportAllStatus === "exporting" ? "Exporting..." : "Export All as ZIP"}
+            </button>
+          </div>
+          {#if exportAllStatus.startsWith("exported:")}
+            <div class="status-msg success">Exported {exportAllStatus.split(":")[1]} conversation(s).</div>
+          {/if}
+          {#if exportAllStatus === "error"}
+            <div class="status-msg error">{exportAllError}</div>
+          {/if}
+        </div>
 
         <h3>Database</h3>
         <div class="card">

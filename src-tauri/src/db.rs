@@ -1484,14 +1484,20 @@ pub struct TokenUsageSummary {
     pub message_count: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ExportedConversation {
+    #[serde(default = "default_export_version")]
+    pub version: String,
+    #[serde(default)]
+    pub id: String,
     pub title: String,
     pub created_at: String,
     pub messages: Vec<ExportedMessage>,
 }
 
-#[derive(Debug, Serialize)]
+fn default_export_version() -> String { "1".to_string() }
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ExportedMessage {
     pub role: String,
     pub content: String,
@@ -1806,10 +1812,7 @@ pub fn get_conversation_project(state: tauri::State<AppState>, conversation_id: 
     state.db.lock().unwrap().get_conversation_project_id(&conversation_id).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn export_conversation(state: tauri::State<AppState>, conversation_id: String, format: String) -> Result<String, String> {
-    let db = state.db.lock().unwrap();
-
+fn do_export_conversation(db: &Database, conversation_id: &str, format: &str) -> Result<String, String> {
     let conv: Conversation = db.conn.query_row(
         "SELECT id, title, created_at, updated_at FROM conversations WHERE id = ?1",
         params![conversation_id],
@@ -1821,9 +1824,9 @@ pub fn export_conversation(state: tauri::State<AppState>, conversation_id: Strin
         }),
     ).map_err(|e| e.to_string())?;
 
-    let messages = db.list_messages(&conversation_id).map_err(|e| e.to_string())?;
+    let messages = db.list_messages(conversation_id).map_err(|e| e.to_string())?;
 
-    match format.as_str() {
+    match format {
         "markdown" => {
             let mut md = format!("# {}\n\n", conv.title);
             md.push_str(&format!("*Exported: {}*\n\n---\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")));
@@ -1839,6 +1842,8 @@ pub fn export_conversation(state: tauri::State<AppState>, conversation_id: Strin
         }
         "json" => {
             let export = ExportedConversation {
+                version: "1".to_string(),
+                id: conv.id,
                 title: conv.title,
                 created_at: conv.created_at,
                 messages: messages.into_iter().map(|m| ExportedMessage {
@@ -1851,6 +1856,105 @@ pub fn export_conversation(state: tauri::State<AppState>, conversation_id: Strin
         }
         _ => Err("Unsupported format. Use 'markdown' or 'json'.".into()),
     }
+}
+
+#[tauri::command]
+pub fn export_conversation(state: tauri::State<AppState>, conversation_id: String, format: String) -> Result<String, String> {
+    let db = state.db.lock().unwrap();
+    do_export_conversation(&db, &conversation_id, &format)
+}
+
+#[tauri::command]
+pub fn export_conversation_to_file(
+    state: tauri::State<AppState>,
+    conversation_id: String,
+    path: String,
+    format: String,
+) -> Result<(), String> {
+    let db = state.db.lock().unwrap();
+    let content = do_export_conversation(&db, &conversation_id, &format)?;
+    std::fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn import_conversation_from_file(
+    state: tauri::State<AppState>,
+    path: String,
+) -> Result<String, String> {
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Cannot read file: {e}"))?;
+    let exported: ExportedConversation = serde_json::from_str(&content)
+        .map_err(|e| format!("Invalid export file: {e}"))?;
+
+    let db = state.db.lock().unwrap();
+    let new_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+
+    db.conn.execute(
+        "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+        params![new_id, exported.title, exported.created_at, now],
+    ).map_err(|e| e.to_string())?;
+
+    for msg in &exported.messages {
+        let msg_id = uuid::Uuid::new_v4().to_string();
+        db.conn.execute(
+            "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![msg_id, new_id, msg.role, msg.content, msg.created_at],
+        ).map_err(|e| e.to_string())?;
+    }
+
+    Ok(new_id)
+}
+
+#[derive(Serialize)]
+pub struct ExportAllResult {
+    pub count: usize,
+}
+
+#[tauri::command]
+pub fn export_all_conversations_to_zip(
+    state: tauri::State<AppState>,
+    path: String,
+) -> Result<ExportAllResult, String> {
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+
+    let db = state.db.lock().unwrap();
+    let conversations: Vec<Conversation> = db.conn
+        .prepare("SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC")
+        .map_err(|e| e.to_string())?
+        .query_map([], |row| Ok(Conversation {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            created_at: row.get(2)?,
+            updated_at: row.get(3)?,
+        }))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let file = std::fs::File::create(&path)
+        .map_err(|e| format!("Cannot create file: {e}"))?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    let count = conversations.len();
+    for conv in &conversations {
+        let content = do_export_conversation(&db, &conv.id, "json")?;
+        let safe_title: String = conv.title
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' })
+            .take(40)
+            .collect();
+        let id_short = &conv.id[..8.min(conv.id.len())];
+        let filename = format!("{}-{}.json", safe_title.trim_matches('_'), id_short);
+        zip.start_file(&filename, options).map_err(|e| e.to_string())?;
+        zip.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
+    }
+
+    zip.finish().map_err(|e| e.to_string())?;
+    Ok(ExportAllResult { count })
 }
 
 // --- Provider settings ---
