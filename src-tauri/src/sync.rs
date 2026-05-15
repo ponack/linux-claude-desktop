@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
+use tauri::Emitter;
 
 // ── Config types ──────────────────────────────────────────────────────────────
 
@@ -46,13 +47,32 @@ impl Default for SyncConfig {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct SyncResult {
     pub pushed: usize,
     pub pulled: usize,
     pub skipped: usize,
+    pub conflicts: usize,
     pub errors: Vec<String>,
     pub timestamp: String,
+}
+
+fn emit_sync_status(app: &tauri::AppHandle, status: &str, result: Option<&SyncResult>) {
+    let _ = app.emit("sync-status", serde_json::json!({
+        "status": status,
+        "pushed": result.map(|r| r.pushed).unwrap_or(0),
+        "pulled": result.map(|r| r.pulled).unwrap_or(0),
+        "conflicts": result.map(|r| r.conflicts).unwrap_or(0),
+        "errors": result.map(|r| r.errors.len()).unwrap_or(0),
+        "timestamp": result.map(|r| r.timestamp.as_str()).unwrap_or(""),
+    }));
+}
+
+fn emit_sync_done(app: &tauri::AppHandle, result: &Result<SyncResult, String>) {
+    match result {
+        Ok(r) => emit_sync_status(app, if r.errors.is_empty() { "done" } else { "done_with_errors" }, Some(r)),
+        Err(e) => { let _ = app.emit("sync-status", serde_json::json!({ "status": "error", "error": e })); }
+    }
 }
 
 // ── Tauri commands ────────────────────────────────────────────────────────────
@@ -138,28 +158,44 @@ pub async fn test_sync_connection(config: SyncConfig) -> Result<String, String> 
 }
 
 #[tauri::command]
-pub fn sync_push(state: tauri::State<crate::AppState>) -> Result<SyncResult, String> {
+pub fn sync_push(app: tauri::AppHandle, state: tauri::State<crate::AppState>) -> Result<SyncResult, String> {
     let config = get_sync_config(state.clone());
     if config.repo_path.is_empty() && config.backend_type == "git" {
         return Err("Sync repo path not configured".to_string());
     }
-    do_push_sync(&state, &config)
+    emit_sync_status(&app, "syncing", None);
+    let result = do_push_sync(&state, &config);
+    emit_sync_done(&app, &result);
+    result
 }
 
 #[tauri::command]
-pub fn sync_pull(state: tauri::State<crate::AppState>) -> Result<SyncResult, String> {
+pub fn sync_pull(app: tauri::AppHandle, state: tauri::State<crate::AppState>) -> Result<SyncResult, String> {
     let config = get_sync_config(state.clone());
-    do_pull_sync(&state, &config)
+    emit_sync_status(&app, "syncing", None);
+    let result = do_pull_sync(&state, &config);
+    emit_sync_done(&app, &result);
+    if let Ok(ref r) = result {
+        if r.conflicts > 0 {
+            let _ = app.emit("sync-conflicts", serde_json::json!({ "count": r.conflicts }));
+        }
+    }
+    result
 }
 
 #[tauri::command]
-pub fn sync_now(state: tauri::State<crate::AppState>) -> Result<SyncResult, String> {
+pub fn sync_now(app: tauri::AppHandle, state: tauri::State<crate::AppState>) -> Result<SyncResult, String> {
     let config = get_sync_config(state.clone());
+    emit_sync_status(&app, "syncing", None);
     let mut pull_result = do_pull_sync(&state, &config)?;
     let push_result = do_push_sync(&state, &config)?;
     pull_result.pushed = push_result.pushed;
     pull_result.skipped = push_result.skipped;
     pull_result.errors.extend(push_result.errors);
+    emit_sync_done(&app, &Ok(pull_result.clone()));
+    if pull_result.conflicts > 0 {
+        let _ = app.emit("sync-conflicts", serde_json::json!({ "count": pull_result.conflicts }));
+    }
     Ok(pull_result)
 }
 
@@ -235,12 +271,12 @@ fn git_push(state: &tauri::State<crate::AppState>, config: &SyncConfig) -> Resul
     }
 
     if pushed == 0 {
-        return Ok(SyncResult { pushed, pulled: 0, skipped, errors, timestamp });
+        return Ok(SyncResult { pushed, pulled: 0, skipped, conflicts: 0, errors, timestamp });
     }
 
     if let Err(e) = run_git_in(&["-C", repo, "add", "conversations/"], repo) {
         errors.push(format!("git add: {e}"));
-        return Ok(SyncResult { pushed, pulled: 0, skipped, errors, timestamp });
+        return Ok(SyncResult { pushed, pulled: 0, skipped, conflicts: 0, errors, timestamp });
     }
 
     let msg = format!("LCD sync {}", chrono::Utc::now().format("%Y-%m-%d %H:%M UTC"));
@@ -265,12 +301,13 @@ fn git_push(state: &tauri::State<crate::AppState>, config: &SyncConfig) -> Resul
         }
     }
 
-    Ok(SyncResult { pushed, pulled: 0, skipped, errors, timestamp })
+    Ok(SyncResult { pushed, pulled: 0, skipped, conflicts: 0, errors, timestamp })
 }
 
 fn git_pull(state: &tauri::State<crate::AppState>, config: &SyncConfig) -> Result<SyncResult, String> {
     let repo = &config.repo_path;
     let mut pulled = 0usize;
+    let mut conflicts = 0usize;
     let mut errors: Vec<String> = Vec::new();
     let timestamp = chrono::Utc::now().to_rfc3339();
 
@@ -285,7 +322,7 @@ fn git_pull(state: &tauri::State<crate::AppState>, config: &SyncConfig) -> Resul
     let conv_dir = format!("{}/conversations", repo);
     let entries = match std::fs::read_dir(&conv_dir) {
         Ok(e) => e,
-        Err(_) => return Ok(SyncResult { pushed: 0, pulled, skipped: 0, errors, timestamp }),
+        Err(_) => return Ok(SyncResult { pushed: 0, pulled, skipped: 0, conflicts: 0, errors, timestamp }),
     };
 
     for entry in entries.flatten() {
@@ -295,14 +332,14 @@ fn git_pull(state: &tauri::State<crate::AppState>, config: &SyncConfig) -> Resul
             Ok(c) => c,
             Err(e) => { errors.push(format!("{:?}: {e}", path.file_name())); continue; }
         };
-        if let Err(e) = upsert_from_json(state, &content, &timestamp) {
-            errors.push(e);
-        } else {
-            pulled += 1;
+        match upsert_from_json(state, &content, &timestamp) {
+            Ok(true) => conflicts += 1,
+            Ok(false) => pulled += 1,
+            Err(e) => errors.push(e),
         }
     }
 
-    Ok(SyncResult { pushed: 0, pulled, skipped: 0, errors, timestamp })
+    Ok(SyncResult { pushed: 0, pulled, skipped: 0, conflicts, errors, timestamp })
 }
 
 // ── WebDAV backend ────────────────────────────────────────────────────────────
@@ -436,12 +473,13 @@ async fn webdav_push_all(state: &tauri::State<'_, crate::AppState>, config: &Syn
         }
     }
 
-    Ok(SyncResult { pushed, pulled: 0, skipped, errors, timestamp })
+    Ok(SyncResult { pushed, pulled: 0, skipped, conflicts: 0, errors, timestamp })
 }
 
 async fn webdav_pull_all(state: &tauri::State<'_, crate::AppState>, config: &SyncConfig) -> Result<SyncResult, String> {
     let client = webdav_client(config);
     let mut pulled = 0usize;
+    let mut conflicts = 0usize;
     let mut errors: Vec<String> = Vec::new();
     let timestamp = chrono::Utc::now().to_rfc3339();
 
@@ -449,7 +487,7 @@ async fn webdav_pull_all(state: &tauri::State<'_, crate::AppState>, config: &Syn
         Ok(h) => h,
         Err(e) => {
             errors.push(format!("List failed: {e}"));
-            return Ok(SyncResult { pushed: 0, pulled, skipped: 0, errors, timestamp });
+            return Ok(SyncResult { pushed: 0, pulled, skipped: 0, conflicts: 0, errors, timestamp });
         }
     };
 
@@ -457,7 +495,8 @@ async fn webdav_pull_all(state: &tauri::State<'_, crate::AppState>, config: &Syn
         match webdav_get(&client, config, href).await {
             Ok(content) => {
                 match upsert_from_json(state, &content, &timestamp) {
-                    Ok(()) => pulled += 1,
+                    Ok(true) => conflicts += 1,
+                    Ok(false) => pulled += 1,
                     Err(e) => errors.push(e),
                 }
             }
@@ -465,7 +504,7 @@ async fn webdav_pull_all(state: &tauri::State<'_, crate::AppState>, config: &Syn
         }
     }
 
-    Ok(SyncResult { pushed: 0, pulled, skipped: 0, errors, timestamp })
+    Ok(SyncResult { pushed: 0, pulled, skipped: 0, conflicts, errors, timestamp })
 }
 
 // ── S3-compatible backend (SigV4) ─────────────────────────────────────────────
@@ -574,12 +613,13 @@ async fn s3_push_all(state: &tauri::State<'_, crate::AppState>, config: &SyncCon
         }
     }
 
-    Ok(SyncResult { pushed, pulled: 0, skipped, errors, timestamp })
+    Ok(SyncResult { pushed, pulled: 0, skipped, conflicts: 0, errors, timestamp })
 }
 
 async fn s3_pull_all(state: &tauri::State<'_, crate::AppState>, config: &SyncConfig) -> Result<SyncResult, String> {
     let client = reqwest::Client::new();
     let mut pulled = 0usize;
+    let mut conflicts = 0usize;
     let mut errors: Vec<String> = Vec::new();
     let timestamp = chrono::Utc::now().to_rfc3339();
 
@@ -587,7 +627,7 @@ async fn s3_pull_all(state: &tauri::State<'_, crate::AppState>, config: &SyncCon
         Ok(k) => k,
         Err(e) => {
             errors.push(format!("List failed: {e}"));
-            return Ok(SyncResult { pushed: 0, pulled, skipped: 0, errors, timestamp });
+            return Ok(SyncResult { pushed: 0, pulled, skipped: 0, conflicts: 0, errors, timestamp });
         }
     };
 
@@ -595,7 +635,8 @@ async fn s3_pull_all(state: &tauri::State<'_, crate::AppState>, config: &SyncCon
         match s3_get(&client, config, key).await {
             Ok(content) => {
                 match upsert_from_json(state, &content, &timestamp) {
-                    Ok(()) => pulled += 1,
+                    Ok(true) => conflicts += 1,
+                    Ok(false) => pulled += 1,
                     Err(e) => errors.push(e),
                 }
             }
@@ -603,7 +644,7 @@ async fn s3_pull_all(state: &tauri::State<'_, crate::AppState>, config: &SyncCon
         }
     }
 
-    Ok(SyncResult { pushed: 0, pulled, skipped: 0, errors, timestamp })
+    Ok(SyncResult { pushed: 0, pulled, skipped: 0, conflicts, errors, timestamp })
 }
 
 // ── SigV4 signing ─────────────────────────────────────────────────────────────
@@ -667,19 +708,47 @@ fn s3_sign_request(method: &str, url: &str, payload: &[u8], config: &SyncConfig)
 
 // ── Shared helper ─────────────────────────────────────────────────────────────
 
+/// Returns Ok(true) if a conflict was detected (and stored), Ok(false) if cleanly upserted.
 fn upsert_from_json(
     state: &tauri::State<crate::AppState>,
     content: &str,
     timestamp: &str,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let exported: crate::db::ExportedConversation = serde_json::from_str(content)
         .map_err(|e| format!("Invalid JSON: {e}"))?;
     if exported.id.is_empty() {
         return Err("Export missing id field".to_string());
     }
+
     let db = state.db.lock().unwrap();
+
+    // Conflict detection: both local and remote changed since last sync
+    let local_updated_at = db.get_local_conversation_updated_at(&exported.id);
+    let last_synced = db.get_sync_state(&exported.id);
+    let remote_updated_at = if exported.updated_at.is_empty() {
+        exported.created_at.clone()
+    } else {
+        exported.updated_at.clone()
+    };
+
+    let is_conflict = match (&local_updated_at, &last_synced) {
+        (Some(local_ua), Some(last_sync)) => {
+            local_ua != last_sync            // local modified since last sync
+            && &remote_updated_at != last_sync  // remote also modified since last sync
+            && local_ua != &remote_updated_at   // they differ
+        }
+        _ => false,
+    };
+
+    if is_conflict {
+        let local_title = db.get_local_conversation_title(&exported.id).unwrap_or_default();
+        db.set_sync_conflict(&exported.id, content, &local_title, &exported.title, timestamp)
+            .map_err(|e| e.to_string())?;
+        return Ok(true);
+    }
+
     db.upsert_synced_conversation(&exported.id, &exported.title, &exported.created_at, &exported.messages)
         .map_err(|e| e.to_string())?;
-    let _ = db.set_sync_state(&exported.id, &exported.created_at, timestamp);
-    Ok(())
+    let _ = db.set_sync_state(&exported.id, &remote_updated_at, timestamp);
+    Ok(false)
 }

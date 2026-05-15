@@ -168,7 +168,7 @@ pub fn run() {
                             .unwrap_or(true)
                     };
                     if should_run {
-                        let _ = sync::sync_now(state.clone());
+                        let _ = sync::sync_now(app_handle4.clone(), state.clone());
                         let now = chrono::Utc::now().to_rfc3339();
                         let _ = state.db.lock().unwrap().set_sync_value("last_auto_synced_at", &now);
                     }
@@ -354,6 +354,7 @@ pub fn run() {
             sync::get_sync_config,
             sync::set_sync_config,
             sync::init_sync_repo,
+            sync::test_sync_connection,
             sync::sync_push,
             sync::sync_pull,
             sync::sync_now,
@@ -369,6 +370,8 @@ pub fn run() {
             db::plugin_storage_delete,
             db::plugin_storage_list_keys,
             db::plugin_storage_clear,
+            db::get_sync_conflicts,
+            db::resolve_sync_conflict,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
