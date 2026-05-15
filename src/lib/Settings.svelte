@@ -23,6 +23,7 @@
     { id: "computeruse", label: "Computer Use", icon: "M2 3h20v14H2z M8 21h8M12 17v4" },
     { id: "git", label: "Git", icon: "M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 9v6M15.4 6.4A8 8 0 0 1 21 13v2" },
     { id: "sync", label: "Sync", icon: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" },
+    { id: "apiserver", label: "API Server", icon: "M5 12h14M12 5l7 7-7 7" },
     { id: "plugins", label: "Plugins", icon: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" },
     { id: "about", label: "About", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 16v-4 M12 8h.01" },
   ];
@@ -63,6 +64,11 @@
   // Git settings
   let gitDefaultRepo = $state("");
   let gitAvailability = $state(null);
+
+  // API Server (Phase 16)
+  let apiServerConfig = $state({ enabled: false, port: 7432, lan_access: false, token: "" });
+  let apiServerSaved = $state(false);
+  let apiServerTokenCopied = $state(false);
 
   // Sync (Phase 15)
   let syncConfig = $state({ enabled: false, backend_type: "git", auto_sync_interval_mins: 0, repo_path: "", commit_name: "LCD Sync", commit_email: "sync@linux-claude-desktop.local", webdav_url: "", webdav_username: "", webdav_password: "", s3_endpoint: "", s3_bucket: "", s3_region: "us-east-1", s3_access_key: "", s3_secret_key: "" });
@@ -251,6 +257,7 @@
         gitAvailability = await invoke("check_git_available").catch(() => null);
         syncConfig = await invoke("get_sync_config").catch(() => syncConfig);
         await loadSyncConflicts();
+        await loadApiServerConfig();
         await loadPluginInfo();
       } catch (_) {}
 
@@ -642,6 +649,35 @@
   async function saveWhisperModelPath() { await invoke("set_whisper_model_path", { path: whisperModelPath }); }
   async function saveCuModel() { await invoke("set_cu_model", { model: cuModel }); }
   async function saveGitDefaultRepo() { await invoke("set_git_default_repo", { path: gitDefaultRepo }); }
+
+  async function loadApiServerConfig() {
+    try {
+      apiServerConfig = await invoke("get_api_server_config");
+    } catch (e) { console.error("Failed to load API server config:", e); }
+  }
+
+  async function saveApiServerConfig() {
+    try {
+      await invoke("set_api_server_config", { config: apiServerConfig });
+      apiServerSaved = true;
+      setTimeout(() => { apiServerSaved = false; }, 3000);
+    } catch (e) { console.error("Failed to save API server config:", e); }
+  }
+
+  async function rotateApiToken() {
+    try {
+      const newToken = await invoke("rotate_api_server_token");
+      apiServerConfig = { ...apiServerConfig, token: newToken };
+    } catch (e) { console.error("Failed to rotate token:", e); }
+  }
+
+  async function copyApiToken() {
+    try {
+      await navigator.clipboard.writeText(apiServerConfig.token);
+      apiServerTokenCopied = true;
+      setTimeout(() => { apiServerTokenCopied = false; }, 2000);
+    } catch (e) {}
+  }
 
   async function saveSyncConfig() {
     try {
@@ -1931,6 +1967,66 @@
             </div>
           {/if}
         {/if}
+      </div>
+
+    {:else if activeSection === "apiserver"}
+      <div class="section">
+        <h3>Local API Server</h3>
+        <p style="font-size: 13px; color: var(--text-muted); margin: 0 0 16px;">
+          Exposes a REST API on your local network so the mobile companion app can access your conversations.
+          Restart the app after enabling or changing the port.
+        </p>
+
+        <div class="card">
+          <div class="setting-row">
+            <label for="api-server-enabled">Enable API server</label>
+            <input id="api-server-enabled" type="checkbox" bind:checked={apiServerConfig.enabled} onchange={saveApiServerConfig} />
+          </div>
+          <div class="setting-row">
+            <label for="api-server-port">Port</label>
+            <input id="api-server-port" type="number" class="text-input" style="width: 100px;"
+              bind:value={apiServerConfig.port} onchange={saveApiServerConfig} min="1024" max="65535" />
+          </div>
+          <div class="setting-row">
+            <label for="api-server-lan">Allow LAN access</label>
+            <div>
+              <input id="api-server-lan" type="checkbox" bind:checked={apiServerConfig.lan_access} onchange={saveApiServerConfig} />
+              <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px;">
+                Binds to 0.0.0.0 so other devices on your network can connect
+              </span>
+            </div>
+          </div>
+          {#if apiServerSaved}
+            <div class="status-msg success" style="margin-top: 8px;">Saved — restart app to apply.</div>
+          {/if}
+        </div>
+
+        <div class="card">
+          <h4 style="margin: 0 0 12px; font-size: 13px;">Bearer Token</h4>
+          <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 10px;">
+            Include this token in every request: <code style="font-size: 11px;">Authorization: Bearer &lt;token&gt;</code>
+          </p>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="text" class="text-input" value={apiServerConfig.token} readonly
+              style="flex: 1; font-family: monospace; font-size: 11px;" />
+            <button class="btn-secondary" onclick={copyApiToken}>
+              {apiServerTokenCopied ? "Copied!" : "Copy"}
+            </button>
+            <button class="btn-secondary" onclick={rotateApiToken} title="Generate a new token (invalidates the old one)">
+              Rotate
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4 style="margin: 0 0 8px; font-size: 13px;">Endpoints</h4>
+          <div style="font-size: 12px; color: var(--text-muted); line-height: 1.8;">
+            <div><code>GET  http://localhost:{apiServerConfig.port}/api/conversations</code></div>
+            <div><code>GET  http://localhost:{apiServerConfig.port}/api/conversations/:id</code></div>
+            <div><code>POST http://localhost:{apiServerConfig.port}/api/conversations</code></div>
+            <div><code>POST http://localhost:{apiServerConfig.port}/api/conversations/:id/messages</code></div>
+          </div>
+        </div>
       </div>
 
     {:else if activeSection === "plugins"}

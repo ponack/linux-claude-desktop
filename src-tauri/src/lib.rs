@@ -1,4 +1,5 @@
 mod api;
+mod api_server;
 mod computer_use;
 mod db;
 mod dbus_service;
@@ -172,6 +173,18 @@ pub fn run() {
                         let now = chrono::Utc::now().to_rfc3339();
                         let _ = state.db.lock().unwrap().set_sync_value("last_auto_synced_at", &now);
                     }
+                }
+            });
+
+            // Local API server (companion PWA backend)
+            let app_handle5 = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let cfg = {
+                    let state = app_handle5.state::<AppState>();
+                    api_server::load_config(&state)
+                };
+                if cfg.enabled {
+                    api_server::start(app_handle5, cfg.port, cfg.lan_access).await;
                 }
             });
 
@@ -372,6 +385,9 @@ pub fn run() {
             db::plugin_storage_clear,
             db::get_sync_conflicts,
             db::resolve_sync_conflict,
+            api_server::get_api_server_config,
+            api_server::set_api_server_config,
+            api_server::rotate_api_server_token,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

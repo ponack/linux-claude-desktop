@@ -99,7 +99,7 @@ fn build_content_blocks(text: &str, attachments: &[Attachment]) -> serde_json::V
 }
 
 /// Resolve the active provider config from settings, with optional project overrides
-fn resolve_provider(state: &AppState, project_id: Option<&str>) -> Result<ResolvedProvider, String> {
+pub fn resolve_provider(state: &AppState, project_id: Option<&str>) -> Result<ResolvedProvider, String> {
     let db = state.db.lock().unwrap();
 
     // Check for project-level overrides
