@@ -7,7 +7,7 @@
   import { onMount, onDestroy, tick } from "svelte";
   import MessageBubble from "./MessageBubble.svelte";
   import ArtifactPanel from "./ArtifactPanel.svelte";
-  import { getPluginCommands, onPluginCommandsChanged, runPluginCommand } from "./plugins.js";
+  import { getPluginCommands, onPluginCommandsChanged, runPluginCommand, emit as emitPluginEvent } from "./plugins.js";
 
   let { conversationId, onConversationCreated, deepLinkText = $bindable("") } = $props();
 
@@ -426,9 +426,23 @@
             : m
         );
         scrollToBottom();
+        // Plugin hook: response:chunk (observable, fire-and-forget — must not block streaming)
+        emitPluginEvent("response:chunk", {
+          content,
+          messageId: message_id,
+          conversationId,
+        }).catch(() => {});
       } else if (eventType === "done") {
         isStreaming = false;
         streamingMessageId = null;
+
+        // Plugin hook: response:complete (observable)
+        const fullMsg = messages.find(m => m.id === message_id);
+        emitPluginEvent("response:complete", {
+          text: fullMsg?.content || "",
+          messageId: message_id,
+          conversationId,
+        }).catch(() => {});
 
         // Auto-TTS when enabled
         if (ttsEnabled) {
@@ -619,6 +633,20 @@ Be thorough in each step. Do not skip steps or combine them.`;
       agentSteps = [{ step: 1, status: "active" }];
     }
 
+    // Plugin hook: message:before-send (mutable; handlers can rewrite text or cancel)
+    const hookResult = await emitPluginEvent("message:before-send", {
+      text,
+      conversationId,
+      attachmentCount: attachments.length,
+    }).catch((e) => { console.error("message:before-send hook failed:", e); return null; });
+    if (hookResult === false) {
+      // A plugin cancelled the send.
+      return;
+    }
+    if (hookResult && typeof hookResult.text === "string") {
+      text = hookResult.text;
+    }
+
     inputText = "";
     const currentAttachments = [...attachments];
     attachments = [];
@@ -631,6 +659,7 @@ Be thorough in each step. Do not skip steps or combine them.`;
         convId = await invoke("create_conversation", { title });
         onConversationCreated(convId);
         isNewConversation = true;
+        emitPluginEvent("conversation:create", { id: convId, title }).catch(() => {});
       } catch (e) {
         console.error("Failed to create conversation:", e);
         return;
@@ -795,6 +824,14 @@ Be thorough in each step. Do not skip steps or combine them.`;
         source: "claude",
         messageId: null,
       });
+      emitPluginEvent("artifact:create", {
+        id,
+        conversationId,
+        artifactType,
+        language: lang,
+        title,
+        source: "claude",
+      }).catch(() => {});
       await loadArtifacts();
       activeArtifactId = id;
     } catch (e) {

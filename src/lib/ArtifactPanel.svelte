@@ -1,6 +1,7 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { save } from "@tauri-apps/plugin-dialog";
+  import { emit as emitPluginEvent } from "./plugins.js";
   import CodeRenderer from "./artifacts/CodeRenderer.svelte";
   import MarkdownRenderer from "./artifacts/MarkdownRenderer.svelte";
   import MermaidRenderer from "./artifacts/MermaidRenderer.svelte";
@@ -80,6 +81,14 @@
         content: template.content,
         source: "template",
       });
+      emitPluginEvent("artifact:create", {
+        id,
+        conversationId,
+        artifactType: template.type,
+        language: template.language,
+        title: template.name,
+        source: "template",
+      }).catch(() => {});
       onSelectArtifact(id);
     } catch (e) {
       console.error("Failed to create from template:", e);
@@ -134,6 +143,10 @@
         content: newContent,
         source: "user_edit",
       });
+      emitPluginEvent("artifact:update", {
+        id: activeArtifactId,
+        source: "user_edit",
+      }).catch(() => {});
     } catch (e) {
       console.error("Failed to save version:", e);
     }
@@ -147,6 +160,10 @@
         content: revertContent,
         source: "revert",
       });
+      emitPluginEvent("artifact:update", {
+        id: activeArtifactId,
+        source: "revert",
+      }).catch(() => {});
       activeTab = "preview";
     } catch (e) {
       console.error("Failed to revert:", e);

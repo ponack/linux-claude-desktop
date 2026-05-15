@@ -1,8 +1,8 @@
 # Linux Claude Desktop — Plugin Guide
 
-Plugins extend LCD with custom slash commands, persistent storage, notifications, and (coming soon) event hooks and custom artifact renderers. They are JavaScript ES modules that the app loads at startup.
+Plugins extend LCD with custom slash commands, persistent storage, notifications, event hooks, and (coming soon) custom artifact renderers. They are JavaScript ES modules that the app loads at startup.
 
-> **Phase 14 is shipping in stages.** This document reflects what's live today (PR 1 + PR 2). Sections marked _coming in PR N_ describe API that is not yet wired up.
+> **Phase 14 is shipping in stages.** This document reflects what's live today (PR 1 + PR 2 + PR 3). Sections marked _coming in PR N_ describe API that is not yet wired up.
 
 ## Installing a plugin
 
@@ -96,11 +96,9 @@ export function deactivate() {
 
 ### `invoke` whitelist
 
-Plugins can call these Tauri commands (read-only inspection only — no mutation in PR 2):
+Plugins can call these Tauri commands (read-only inspection only — no mutation):
 
-`get_app_info`, `get_conversations`, `get_messages`, `get_provider`, `get_model`
-
-The whitelist will grow in PR 3 once event hooks land.
+`get_app_info`, `get_conversations`, `get_messages`, `get_provider`, `get_model`, `get_conversation_usage`, `get_total_usage`, `get_artifacts`, `get_artifact_content`
 
 ### Command handler return values
 
@@ -111,14 +109,30 @@ When a plugin command runs from the slash-command picker, the handler can:
 
 Errors thrown by the handler surface in chat as an error bubble — same UX as a failed shell command.
 
-## Coming in later PRs
+## Event hooks
 
-- **PR 3 — Event hooks**
-  - `message:before-send` (mutable — can rewrite outgoing text, attach context)
-  - `response:chunk` (observable — streaming token stream)
-  - `response:complete` (observable + can append text)
-  - `artifact:create`, `artifact:update`
-  - `conversation:create`, `conversation:delete`
+Subscribe via `lcd.on(event, handler)`. Hooks fire in the order plugins are loaded.
+
+| Event | Kind | Payload | Notes |
+|---|---|---|---|
+| `message:before-send` | mutable | `{ text, conversationId, attachmentCount }` | Return `false` to cancel the send, or return `{ text: "rewritten" }` to override the outgoing text. |
+| `response:chunk` | observable | `{ content, messageId, conversationId }` | Fires per streaming delta. Return values are ignored — host uses fire-and-forget so handlers don't slow the stream. |
+| `response:complete` | observable | `{ text, messageId, conversationId }` | Fires once when Claude finishes streaming. `text` is the full assistant response. |
+| `artifact:create` | observable | `{ id, conversationId, artifactType, language, title, source }` | `source` is `claude`, `template`, or `user_edit`. |
+| `artifact:update` | observable | `{ id, source }` | Fires on edits and reverts. |
+| `conversation:create` | observable | `{ id, title }` | Fires on the first user message in a fresh chat. |
+| `conversation:delete` | observable | `{ id }` | |
+
+### Handler return-value contract
+
+- Return `false` → **cancel** the event (`message:before-send` only — observable events ignore this).
+- Return `undefined` → pass through unchanged.
+- Return a **partial object** → shallow-merged into the current payload. So `return { text: "new" }` works without you having to spread the rest.
+- Return **any other value** → replaces the payload entirely.
+
+If multiple plugins subscribe to the same event, they run in load order and each sees the previous handler's mutations.
+
+## Coming in later PRs
 
 - **PR 4 — Custom artifact renderers**
   - `lcd.registerArtifactType(typeName, { mimeType, extensions, render(container, content, ctx) })`

@@ -36,6 +36,10 @@ const INVOKE_WHITELIST = new Set([
   "get_messages",
   "get_provider",
   "get_model",
+  "get_conversation_usage",
+  "get_total_usage",
+  "get_artifacts",
+  "get_artifact_content",
 ]);
 
 // Plugin commands keyed by plugin id, then command name.
@@ -88,9 +92,19 @@ function busRemoveAllForPlugin(pluginId) {
 }
 
 /**
- * Emit an event to all subscribers. Returns the (possibly mutated) payload.
- * Handlers may return a value to override the payload, or `false` to cancel.
- * Used by PR 3+ to surface lifecycle events; safe to call now (no-op if no subs).
+ * Emit an event to all subscribers. Returns the (possibly mutated) payload,
+ * or `false` if any handler cancelled.
+ *
+ * Handler return values:
+ *   - `false`               → cancel (subsequent handlers do NOT run; emit returns false)
+ *   - `undefined`           → pass through unchanged
+ *   - partial object        → shallow-merged into the current payload (handy:
+ *                             `return { text: "rewritten" }` for message:before-send)
+ *   - any other value       → replaces the payload entirely
+ *
+ * For "observable" events (response:chunk, artifact:create, etc.) the host
+ * calls `emit().catch(...)` and ignores the return value; handlers can still
+ * subscribe, but mutations have no effect.
  */
 export async function emit(event, payload) {
   const set = subscribers.get(event);
@@ -100,7 +114,15 @@ export async function emit(event, payload) {
     try {
       const result = await sub.handler(current);
       if (result === false) return false;
-      if (result !== undefined) current = result;
+      if (result === undefined) continue;
+      if (
+        current && typeof current === "object" && !Array.isArray(current) &&
+        result && typeof result === "object" && !Array.isArray(result)
+      ) {
+        current = { ...current, ...result };
+      } else {
+        current = result;
+      }
     } catch (e) {
       console.error(`[plugin ${sub.pluginId}] handler for "${event}" threw:`, e);
     }
