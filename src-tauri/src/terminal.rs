@@ -2,8 +2,7 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use tauri::Emitter;
 
 // ── Session state ─────────────────────────────────────────────────────────────
@@ -16,11 +15,10 @@ enum TermCmd {
 
 struct SessionHandle {
     tx: std::sync::mpsc::SyncSender<TermCmd>,
-    alive: Arc<AtomicBool>,
 }
 
 pub struct TerminalState {
-    pub sessions: Mutex<HashMap<String, SessionHandle>>,
+    sessions: Mutex<HashMap<String, SessionHandle>>,
 }
 
 impl TerminalState {
@@ -63,9 +61,6 @@ pub async fn spawn_terminal(
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "/".to_string())
     });
-
-    let alive = Arc::new(AtomicBool::new(true));
-    let alive_reader = Arc::clone(&alive);
 
     let (tx, rx) = std::sync::mpsc::sync_channel::<TermCmd>(64);
 
@@ -154,7 +149,6 @@ pub async fn spawn_terminal(
                     }
                 }
             }
-            alive_reader.store(false, Ordering::SeqCst);
             let _ = app_reader.emit(
                 "terminal-exit",
                 serde_json::json!({ "session_id": &sid_reader, "code": 0 }),
@@ -184,7 +178,7 @@ pub async fn spawn_terminal(
         .sessions
         .lock()
         .unwrap()
-        .insert(session_id, SessionHandle { tx, alive });
+        .insert(session_id, SessionHandle { tx });
     Ok(())
 }
 
