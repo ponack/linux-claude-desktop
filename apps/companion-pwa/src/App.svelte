@@ -1,11 +1,18 @@
 <script>
+  import { onMount } from "svelte";
   import { loadConnection, saveConnection, clearConnection } from "./lib/connection.js";
+  import { getAll, remove } from "./lib/queue.js";
+  import { makeApi } from "./lib/api.js";
   import Setup from "./views/Setup.svelte";
   import ConversationList from "./views/ConversationList.svelte";
   import ConversationView from "./views/ConversationView.svelte";
 
   let conn = $state(loadConnection());
   let activeConvId = $state(null);
+  let isOnline = $state(navigator.onLine);
+
+  // Callback registered by ConversationView so queue flush can reload its messages
+  let onQueueFlushed = $state(null);
 
   function onConnect(newConn) {
     saveConnection(newConn);
@@ -25,13 +32,64 @@
 
   function onBack() {
     activeConvId = null;
+    onQueueFlushed = null;
   }
+
+  async function flushQueue() {
+    if (!conn) return;
+    const api = makeApi(conn);
+    const pending = getAll();
+    for (const item of pending) {
+      try {
+        await api.sendMessage(item.conversationId, item.content);
+        remove(item.id);
+      } catch {
+        break; // still offline or error — stop, leave remaining in queue
+      }
+    }
+    onQueueFlushed?.();
+  }
+
+  onMount(() => {
+    const goOnline = () => {
+      isOnline = true;
+      flushQueue();
+    };
+    const goOffline = () => { isOnline = false; };
+
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+
+    // Listen for Background Sync messages from the service worker
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", (e) => {
+        if (e.data?.type === "flush-queue") flushQueue();
+      });
+    }
+
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  });
 </script>
+
+{#if !isOnline}
+  <div class="offline-banner" role="status">
+    Offline — messages will send when reconnected
+  </div>
+{/if}
 
 {#if !conn}
   <Setup {onConnect} />
 {:else if activeConvId}
-  <ConversationView {conn} conversationId={activeConvId} {onBack} />
+  <ConversationView
+    {conn}
+    conversationId={activeConvId}
+    {isOnline}
+    {onBack}
+    onRegisterFlushCallback={(cb) => { onQueueFlushed = cb; }}
+  />
 {:else}
   <ConversationList {conn} {onSelect} {onDisconnect} />
 {/if}
@@ -51,6 +109,8 @@
     --text: #e0e0f0;
     --muted: #6b6b8a;
     --accent: #7c5cbf;
+    --warning: #e8a838;
+    --offline-bg: #2a1a00;
   }
 
   @media (prefers-color-scheme: light) {
@@ -61,6 +121,7 @@
       --text: #1a1a2e;
       --muted: #8888a0;
       --accent: #6a4db0;
+      --offline-bg: #fff3cd;
     }
   }
 
@@ -87,5 +148,20 @@
   :global(a) {
     color: var(--accent);
     text-decoration: none;
+  }
+
+  .offline-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 999;
+    background: var(--offline-bg);
+    color: var(--warning);
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 16px;
+    padding-top: max(6px, env(safe-area-inset-top));
   }
 </style>
