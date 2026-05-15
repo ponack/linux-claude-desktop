@@ -76,6 +76,46 @@ export function activate(lcd) {
   lcd.on("artifact:create", (payload) => {
     lcd.log("artifact created:", payload.title, `(${payload.language || payload.artifactType})`);
   });
+
+  // ── Custom artifact renderer (PR 4) ───────────────────────────────────────
+
+  // Render CSV artifacts as a real HTML table. Triggers on any artifact whose
+  // language is "csv" or whose title ends with ".csv".
+  lcd.registerArtifactType("csv", {
+    languages: ["csv"],
+    extensions: [".csv"],
+    mimeType: "text/csv",
+    render(container, content) {
+      const rows = content
+        .split("\n")
+        .filter((r) => r.length > 0)
+        .map((r) => r.split(","));
+      if (rows.length === 0) {
+        container.textContent = "(empty)";
+        return;
+      }
+      const [head, ...body] = rows;
+      const esc = (s) =>
+        String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      container.innerHTML = `
+        <style>
+          .lcd-csv { font-family: system-ui, sans-serif; font-size: 13px; padding: 12px; }
+          .lcd-csv table { border-collapse: collapse; width: 100%; }
+          .lcd-csv th, .lcd-csv td { padding: 6px 10px; border: 1px solid var(--border, #444); text-align: left; }
+          .lcd-csv th { background: var(--bg-tertiary, #2a2a3e); font-weight: 600; }
+          .lcd-csv tr:nth-child(even) td { background: rgba(255, 255, 255, 0.02); }
+        </style>
+        <div class="lcd-csv">
+          <table>
+            <thead><tr>${head.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+            <tbody>${body
+              .map((row) => `<tr>${row.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`)
+              .join("")}</tbody>
+          </table>
+        </div>
+      `;
+    },
+  });
 }
 
 export function deactivate() {

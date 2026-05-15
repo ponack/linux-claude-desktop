@@ -1,13 +1,15 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { save } from "@tauri-apps/plugin-dialog";
-  import { emit as emitPluginEvent } from "./plugins.js";
+  import { emit as emitPluginEvent, resolveArtifactRenderer, onPluginRegistryChanged } from "./plugins.js";
+  import { onDestroy } from "svelte";
   import CodeRenderer from "./artifacts/CodeRenderer.svelte";
   import MarkdownRenderer from "./artifacts/MarkdownRenderer.svelte";
   import MermaidRenderer from "./artifacts/MermaidRenderer.svelte";
   import HtmlRenderer from "./artifacts/HtmlRenderer.svelte";
   import ReactRenderer from "./artifacts/ReactRenderer.svelte";
   import VersionHistory from "./artifacts/VersionHistory.svelte";
+  import PluginArtifactRenderer from "./artifacts/PluginArtifactRenderer.svelte";
 
   let { artifacts = [], activeArtifactId = null, conversationId, onClose, onSelectArtifact, onIterateWithClaude } = $props();
 
@@ -241,6 +243,32 @@
   }
 
   let rendererType = $derived(getRendererType(activeArtifact));
+
+  // Plugin artifact renderers (Phase 14 PR 4). Re-resolve when the active
+  // artifact changes OR when a plugin is reloaded.
+  let pluginRenderer = $state(null); // { pluginId, pluginName, typeName, render } | null
+  let registryVersion = $state(0);
+
+  $effect(() => {
+    activeArtifact;
+    registryVersion;
+    pluginRenderer = activeArtifact ? resolveArtifactRenderer(activeArtifact) : null;
+  });
+
+  const unsubRegistry = onPluginRegistryChanged(() => { registryVersion++; });
+  onDestroy(() => { unsubRegistry?.(); });
+
+  let pluginRendererCtx = $derived(
+    activeArtifact
+      ? {
+          id: activeArtifactId,
+          conversationId,
+          language: activeArtifact.language || "",
+          title: activeArtifact.title || "",
+          artifactType: activeArtifact.artifact_type || "",
+        }
+      : null
+  );
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -296,6 +324,11 @@
       <span class="type-badge">{activeArtifact?.artifact_type || ""}</span>
       {#if activeArtifact?.language && activeArtifact.language !== activeArtifact.artifact_type}
         <span class="lang-badge">{activeArtifact.language}</span>
+      {/if}
+      {#if pluginRenderer}
+        <span class="plugin-badge" title="Rendered by plugin: {pluginRenderer.pluginName}">
+          plugin · {pluginRenderer.pluginName}
+        </span>
       {/if}
       <span class="version-badge">v{activeArtifact?.current_version || 1}</span>
     </div>
@@ -387,7 +420,13 @@
   <!-- Body -->
   <div class="artifact-body">
     {#if activeTab === "preview"}
-      {#if rendererType === "mermaid"}
+      {#if pluginRenderer}
+        <PluginArtifactRenderer
+          render={pluginRenderer.render}
+          {content}
+          ctx={pluginRendererCtx}
+        />
+      {:else if rendererType === "mermaid"}
         <MermaidRenderer {content} />
       {:else if rendererType === "markdown"}
         <MarkdownRenderer {content} />
@@ -496,7 +535,7 @@
     outline: none;
     width: 150px;
   }
-  .type-badge, .lang-badge, .version-badge {
+  .type-badge, .lang-badge, .version-badge, .plugin-badge {
     font-size: 10px;
     padding: 1px 6px;
     border-radius: 4px;
@@ -505,6 +544,11 @@
     white-space: nowrap;
   }
   .version-badge { color: var(--accent); }
+  .plugin-badge {
+    background: rgba(122, 162, 247, 0.15);
+    color: var(--accent, #7aa2f7);
+    font-family: "JetBrains Mono", monospace;
+  }
 
   .mode-tabs {
     display: flex;

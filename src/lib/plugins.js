@@ -46,6 +46,10 @@ const INVOKE_WHITELIST = new Set([
 // Shape: Map<pluginId, Map<commandName, { description, handler }>>
 const pluginCommands = new Map();
 
+// Plugin artifact renderers keyed by plugin id, then by registered type name.
+// Shape: Map<pluginId, Map<typeName, { languages, extensions, mimeType, render }>>
+const pluginArtifactRenderers = new Map();
+
 // Listeners notified whenever the command registry changes (after activate /
 // deactivate / reload). Chat.svelte subscribes so its slash-command picker stays
 // in sync.
@@ -55,6 +59,10 @@ export function onPluginCommandsChanged(fn) {
   commandsChangeListeners.add(fn);
   return () => commandsChangeListeners.delete(fn);
 }
+
+// Alias — same listeners fire for any registry change (commands AND renderers).
+// Prefer this name in new call sites.
+export const onPluginRegistryChanged = onPluginCommandsChanged;
 
 function notifyCommandsChanged() {
   for (const fn of commandsChangeListeners) {
@@ -181,6 +189,23 @@ function buildLcd(pluginId, logSink, permissions) {
       if (!pluginCommands.has(pluginId)) pluginCommands.set(pluginId, new Map());
       pluginCommands.get(pluginId).set(name, { description: description || "", handler });
     },
+    registerArtifactType: (typeName, opts = {}) => {
+      requirePerm("artifacts");
+      if (!typeName || typeof typeName !== "string") {
+        throw new Error("registerArtifactType: typeName required");
+      }
+      if (typeof opts.render !== "function") {
+        throw new Error("registerArtifactType: opts.render must be a function");
+      }
+      const entry = {
+        languages: Array.isArray(opts.languages) ? opts.languages.map((s) => s.toLowerCase()) : [],
+        extensions: Array.isArray(opts.extensions) ? opts.extensions.map((s) => s.toLowerCase()) : [],
+        mimeType: opts.mimeType || "",
+        render: opts.render,
+      };
+      if (!pluginArtifactRenderers.has(pluginId)) pluginArtifactRenderers.set(pluginId, new Map());
+      pluginArtifactRenderers.get(pluginId).set(typeName.toLowerCase(), entry);
+    },
     storage,
     notify: (message, level = "info") => {
       requirePerm("notify");
@@ -240,6 +265,7 @@ async function deactivatePlugin(id) {
   }
   busRemoveAllForPlugin(id);
   pluginCommands.delete(id);
+  pluginArtifactRenderers.delete(id);
   loaded.delete(id);
 }
 
@@ -316,4 +342,47 @@ export async function runPluginCommand(pluginId, name, args) {
   }
   const { handler } = cmds.get(name);
   return await handler(args);
+}
+
+/**
+ * Find a plugin artifact renderer that matches an artifact.
+ *
+ * Match priority (first wins):
+ *   1. Exact match against the registered typeName == artifact.artifact_type
+ *   2. artifact.language in the renderer's `languages` array
+ *   3. artifact.title ends with one of the renderer's `extensions`
+ *
+ * Returns { pluginId, pluginName, typeName, render } or null.
+ */
+export function resolveArtifactRenderer(artifact) {
+  if (!artifact) return null;
+  const t = (artifact.artifact_type || "").toLowerCase();
+  const l = (artifact.language || "").toLowerCase();
+  const title = (artifact.title || "").toLowerCase();
+
+  for (const [pluginId, byType] of pluginArtifactRenderers) {
+    const pluginName = loaded.get(pluginId)?.manifest?.name || pluginId;
+    // 1. Match by typeName
+    if (t && byType.has(t)) {
+      const entry = byType.get(t);
+      return { pluginId, pluginName, typeName: t, render: entry.render };
+    }
+    // 2. Match by language
+    if (l) {
+      for (const [typeName, entry] of byType) {
+        if (entry.languages.includes(l)) {
+          return { pluginId, pluginName, typeName, render: entry.render };
+        }
+      }
+    }
+    // 3. Match by title extension
+    if (title) {
+      for (const [typeName, entry] of byType) {
+        if (entry.extensions.some((ext) => title.endsWith(ext))) {
+          return { pluginId, pluginName, typeName, render: entry.render };
+        }
+      }
+    }
+  }
+  return null;
 }
