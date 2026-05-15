@@ -2,6 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
+  import { getLoadedState, reloadPlugins } from "./plugins.js";
 
   let { onClose } = $props();
 
@@ -21,6 +22,7 @@
     { id: "accessibility", label: "Accessibility", icon: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z M12 9a3 3 0 100 6 3 3 0 000-6z" },
     { id: "computeruse", label: "Computer Use", icon: "M2 3h20v14H2z M8 21h8M12 17v4" },
     { id: "git", label: "Git", icon: "M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 9v6M15.4 6.4A8 8 0 0 1 21 13v2" },
+    { id: "plugins", label: "Plugins", icon: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" },
     { id: "about", label: "About", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 16v-4 M12 8h.01" },
   ];
 
@@ -60,6 +62,12 @@
   // Git settings
   let gitDefaultRepo = $state("");
   let gitAvailability = $state(null);
+
+  // Plugins (Phase 14)
+  let pluginScan = $state({ plugins: [], errors: [] });
+  let pluginRuntimeState = $state({});
+  let pluginsDir = $state("");
+  let pluginReloading = $state(false);
 
   // Status
   let saveStatus = $state(""); // "", "saving", "saved", "error"
@@ -226,6 +234,7 @@
         cuAvailability = await invoke("check_computer_use_available");
         gitDefaultRepo = await invoke("get_git_default_repo").catch(() => "");
         gitAvailability = await invoke("check_git_available").catch(() => null);
+        await loadPluginInfo();
       } catch (_) {}
 
       try {
@@ -601,6 +610,35 @@
   async function saveWhisperModelPath() { await invoke("set_whisper_model_path", { path: whisperModelPath }); }
   async function saveCuModel() { await invoke("set_cu_model", { model: cuModel }); }
   async function saveGitDefaultRepo() { await invoke("set_git_default_repo", { path: gitDefaultRepo }); }
+
+  async function loadPluginInfo() {
+    try {
+      pluginScan = await invoke("list_plugins");
+      pluginsDir = await invoke("get_plugins_dir");
+      pluginRuntimeState = getLoadedState();
+    } catch (e) {
+      console.error("Failed to load plugin info:", e);
+    }
+  }
+
+  async function togglePlugin(id, enabled) {
+    await invoke("set_plugin_enabled", { id, enabled });
+    await reloadAllPlugins();
+  }
+
+  async function reloadAllPlugins() {
+    pluginReloading = true;
+    try {
+      await reloadPlugins();
+      await loadPluginInfo();
+    } finally {
+      pluginReloading = false;
+    }
+  }
+
+  async function openPluginsFolder() {
+    try { await invoke("open_plugins_folder"); } catch (e) { console.error(e); }
+  }
 
   function formatInterval(ms) {
     if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
@@ -1533,6 +1571,93 @@
               <p class="setting-description">The repository opened by default when you launch the Git view (Ctrl+Shift+G).</p>
             </div>
           </div>
+        {/if}
+      </div>
+
+    {:else if activeSection === "plugins"}
+      <div class="section">
+        <h3>Plugins</h3>
+
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="setting-row" style="gap: 10px; flex-direction: column; align-items: stretch;">
+            <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
+              Plugins are loaded from
+              <code style="font-size: 12px;">{pluginsDir || "~/.local/share/linux-claude-desktop/plugins/"}</code>
+              See <a href="https://github.com/ponack/linux-claude-desktop/blob/main/docs/PLUGINS.md" target="_blank" rel="noopener">docs/PLUGINS.md</a> for the API and manifest schema.
+            </p>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-secondary" onclick={openPluginsFolder}>Open Plugins Folder</button>
+              <button class="btn-secondary" onclick={reloadAllPlugins} disabled={pluginReloading}>
+                {pluginReloading ? "Reloading…" : "Reload Plugins"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {#if pluginScan.errors.length > 0}
+          <div class="card" style="margin-bottom: 16px; border-left: 3px solid var(--danger);">
+            <h4 style="font-size: 13px; margin: 0 0 8px 0; color: var(--danger);">Manifest errors</h4>
+            {#each pluginScan.errors as err}
+              <div style="font-size: 12px; font-family: monospace; margin-bottom: 4px;">
+                <strong>{err.path}</strong>: {err.error}
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if pluginScan.plugins.length === 0}
+          <div class="card">
+            <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
+              No plugins installed yet. Drop a plugin folder into the plugins directory and click Reload.
+            </p>
+          </div>
+        {:else}
+          {#each pluginScan.plugins as p (p.manifest.id)}
+            {@const rt = pluginRuntimeState[p.manifest.id]}
+            <div class="card" style="margin-bottom: 8px;">
+              <div class="setting-row" style="align-items: flex-start;">
+                <div class="setting-control" style="flex: 1;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <strong style="font-size: 14px;">{p.manifest.name}</strong>
+                    <span style="font-size: 11px; color: var(--text-muted); font-family: monospace;">v{p.manifest.version}</span>
+                    {#if rt?.error}
+                      <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(233, 69, 96, 0.15); color: var(--danger);">Error</span>
+                    {:else if p.enabled}
+                      <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(78, 204, 163, 0.15); color: var(--success);">Active</span>
+                    {:else}
+                      <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--bg-tertiary); color: var(--text-muted);">Disabled</span>
+                    {/if}
+                  </div>
+                  {#if p.manifest.description}
+                    <p style="font-size: 13px; color: var(--text-secondary); margin: 4px 0 0 0;">{p.manifest.description}</p>
+                  {/if}
+                  {#if p.manifest.author}
+                    <p style="font-size: 11px; color: var(--text-muted); margin: 4px 0 0 0;">by {p.manifest.author}</p>
+                  {/if}
+                  {#if p.manifest.permissions?.length > 0}
+                    <div style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">
+                      {#each p.manifest.permissions as perm}
+                        <span style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--bg-tertiary); color: var(--text-secondary); font-family: monospace;">{perm}</span>
+                      {/each}
+                    </div>
+                  {/if}
+                  {#if rt?.error}
+                    <pre style="margin-top: 8px; padding: 8px; background: var(--bg-primary); border-radius: 6px; font-size: 11px; color: var(--danger); white-space: pre-wrap; overflow-x: auto; max-height: 120px;">{rt.error}</pre>
+                  {/if}
+                  {#if rt?.logs?.length > 0}
+                    <details style="margin-top: 8px;">
+                      <summary style="font-size: 11px; color: var(--text-muted); cursor: pointer;">Console ({rt.logs.length} lines)</summary>
+                      <pre style="margin: 4px 0 0 0; padding: 8px; background: var(--bg-primary); border-radius: 6px; font-size: 11px; color: var(--text-secondary); white-space: pre-wrap; overflow-x: auto; max-height: 160px;">{rt.logs.map((l) => `${l.time.slice(11, 19)} ${l.msg}`).join("\n")}</pre>
+                    </details>
+                  {/if}
+                </div>
+                <label class="toggle-switch" style="margin-left: 12px;">
+                  <input type="checkbox" checked={p.enabled} onchange={(e) => togglePlugin(p.manifest.id, e.target.checked)} />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          {/each}
         {/if}
       </div>
 

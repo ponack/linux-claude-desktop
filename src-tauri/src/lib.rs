@@ -5,6 +5,7 @@ mod dbus_service;
 mod executor;
 mod git;
 mod mcp;
+mod plugins;
 mod providers;
 mod terminal;
 
@@ -314,6 +315,11 @@ pub fn run() {
             db::touch_git_repo,
             db::get_git_default_repo,
             db::set_git_default_repo,
+            plugins::get_plugins_dir,
+            plugins::list_plugins,
+            plugins::read_plugin_source,
+            plugins::set_plugin_enabled,
+            plugins::open_plugins_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

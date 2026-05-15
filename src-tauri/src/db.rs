@@ -395,6 +395,22 @@ impl Database {
             );"
         ).ok();
 
+        // Migration: Phase 14 — Plugin system
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS plugin_state (
+                id TEXT PRIMARY KEY,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS plugin_data (
+                plugin_id TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (plugin_id, key)
+            );"
+        ).ok();
+
         Ok(Self { conn })
     }
 
@@ -1334,6 +1350,24 @@ impl Database {
 
     pub fn delete_git_repo(&self, id: &str) -> Result<(), rusqlite::Error> {
         self.conn.execute("DELETE FROM git_repos WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    // --- Plugin state (enabled/disabled) ---
+
+    pub fn get_disabled_plugins(&self) -> Result<Vec<String>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare("SELECT id FROM plugin_state WHERE enabled = 0")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.collect()
+    }
+
+    pub fn set_plugin_enabled(&self, id: &str, enabled: bool) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO plugin_state (id, enabled, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at",
+            params![id, if enabled { 1 } else { 0 }, now],
+        )?;
         Ok(())
     }
 }
