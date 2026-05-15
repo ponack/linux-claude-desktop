@@ -163,6 +163,7 @@ Anthropic's official Claude Desktop app is available for macOS and Windows, but 
 - Embedded terminal (`Ctrl+Shift+T`) — real PTY shell (bash/zsh) with "Send to Claude" selection
 - Inline code execution — run Python/JS/Bash/Ruby snippets from chat code blocks with output panel
 - Git panel (`Ctrl+Shift+G`) — staged/unstaged files, diff viewer, commit/push/pull, "Ask Claude" to send diff to chat
+- Plugin system — JS/TS plugins add slash commands, persistent storage, toast notifications, event hooks (`message:before-send`, `response:complete`, etc.), and custom artifact renderers; see [docs/PLUGINS.md](docs/PLUGINS.md)
 
 ## Quick Start
 
@@ -383,13 +384,14 @@ linux-claude-desktop/
 - [x] Code execution sandbox — run Python/JS/Bash/Ruby snippets inline from chat code blocks, with stdout/stderr/timeout output panel
 - [x] Git integration (`Ctrl+Shift+G`) — staged/unstaged file list, per-file diff viewer, stage/unstage, commit, push/pull, recent repo picker, "Ask Claude" to send diff to chat
 
-### Phase 14 — Plugin System
+### Phase 14 — Plugin System ✅
 
-- [ ] Plugin API (JavaScript/TypeScript plugin interface)
-- [ ] Plugin marketplace / registry
-- [ ] Custom renderers via plugins (extend artifact types)
-- [ ] Custom commands via plugins (beyond shell commands)
-- [ ] Event hooks (on-message, on-response, on-artifact-create)
+- [x] JavaScript ES module plugins loaded from `~/.local/share/linux-claude-desktop/plugins/<id>/` — see [docs/PLUGINS.md](docs/PLUGINS.md)
+- [x] Settings → Plugins UI: enable/disable, per-plugin console + error display, "Open Plugins Folder" + "Reload" buttons
+- [x] Permission-gated `lcd` API: `registerCommand`, `storage` (per-plugin namespaced KV), `notify` (toast), `invoke` (read-only Tauri whitelist), `log`, event bus
+- [x] Core event hooks: `message:before-send` (mutable — can rewrite or cancel), `response:chunk`, `response:complete`, `conversation:create`/`delete`, `artifact:create`/`update`
+- [x] Custom artifact renderers via `lcd.registerArtifactType` (match by typeName, language, or title extension)
+- [ ] Plugin marketplace / registry (future)
 
 ## Tech Stack
 
