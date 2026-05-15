@@ -14,6 +14,7 @@
   import TerminalView from "./lib/TerminalView.svelte";
   import GitView from "./lib/GitView.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
+  import { initPlugins } from "./lib/plugins.js";
 
   let currentView = $state("chat");
   let activeConversationId = $state(null);
@@ -112,6 +113,9 @@
         deepLinkText = prompt;
       }
     });
+
+    // Activate plugins (Phase 14)
+    initPlugins().catch((e) => console.error("Plugin init failed:", e));
   });
 
   onDestroy(async () => {
