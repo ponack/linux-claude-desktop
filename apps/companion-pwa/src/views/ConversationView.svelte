@@ -1,8 +1,9 @@
 <script>
   import { makeApi } from "../lib/api.js";
+  import { enqueue, getAll, remove, countForConversation } from "../lib/queue.js";
   import { tick } from "svelte";
 
-  let { conn, conversationId, onBack } = $props();
+  let { conn, conversationId, isOnline = true, onBack, onRegisterFlushCallback } = $props();
 
   const api = $derived(makeApi(conn));
 
@@ -12,7 +13,17 @@
   let error = $state("");
   let input = $state("");
   let sending = $state(false);
+  let pendingCount = $state(0);
+  $effect(() => { pendingCount = countForConversation(conversationId); });
   let msgListEl;
+
+  // Register a callback so App.svelte can tell us when the queue flushed
+  $effect(() => {
+    onRegisterFlushCallback?.(() => {
+      pendingCount = countForConversation(conversationId);
+      load();
+    });
+  });
 
   async function load() {
     loading = true;
@@ -40,10 +51,26 @@
     const text = input.trim();
     if (!text || sending) return;
     input = "";
+
+    // Offline: queue and show locally as pending
+    if (!isOnline) {
+      enqueue(conversationId, text);
+      pendingCount = countForConversation(conversationId);
+      messages = [...messages, {
+        id: `pending_${Date.now()}`,
+        role: "user",
+        content: text,
+        created_at: new Date().toISOString(),
+        pending: true,
+      }];
+      await tick();
+      scrollToBottom();
+      return;
+    }
+
     sending = true;
     error = "";
 
-    // Optimistic user message
     const optimistic = {
       id: `opt_${Date.now()}`,
       role: "user",
@@ -56,7 +83,6 @@
 
     try {
       const assistantMsg = await api.sendMessage(conversationId, text);
-      // Replace optimistic + append assistant
       messages = messages.filter((m) => m.id !== optimistic.id);
       messages = [
         ...messages,
@@ -66,8 +92,19 @@
       await tick();
       scrollToBottom();
     } catch (e) {
+      // Network failure mid-attempt: queue it
       messages = messages.filter((m) => m.id !== optimistic.id);
-      error = e.message;
+      enqueue(conversationId, text);
+      pendingCount = countForConversation(conversationId);
+      messages = [...messages, {
+        id: `pending_${Date.now()}`,
+        role: "user",
+        content: text,
+        created_at: new Date().toISOString(),
+        pending: true,
+      }];
+      await tick();
+      scrollToBottom();
     } finally {
       sending = false;
     }
@@ -106,7 +143,7 @@
     {:else}
       {#each messages as msg (msg.id)}
         <div class="bubble-wrap" class:user={msg.role === "user"}>
-          <div class="bubble" class:user={msg.role === "user"} class:assistant={msg.role === "assistant"}>
+          <div class="bubble" class:user={msg.role === "user"} class:assistant={msg.role === "assistant"} class:pending={msg.pending}>
             {msg.content}
           </div>
         </div>
@@ -118,6 +155,11 @@
           </div>
         </div>
       {/if}
+    {/if}
+    {#if pendingCount > 0 && !isOnline}
+      <div class="pending-notice">
+        {pendingCount} message{pendingCount > 1 ? "s" : ""} queued — will send when online
+      </div>
     {/if}
   </div>
 
@@ -229,10 +271,21 @@
     border-bottom-right-radius: 4px;
   }
 
+  .bubble.user.pending {
+    opacity: 0.6;
+  }
+
   .bubble.assistant {
     background: var(--surface);
     color: var(--text);
     border-bottom-left-radius: 4px;
+  }
+
+  .pending-notice {
+    text-align: center;
+    font-size: 12px;
+    color: var(--warning, #e8a838);
+    padding: 8px 0 4px;
   }
 
   /* Typing indicator dots */
