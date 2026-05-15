@@ -427,6 +427,10 @@ impl Database {
                 local_title TEXT NOT NULL DEFAULT '',
                 remote_title TEXT NOT NULL DEFAULT '',
                 detected_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS api_server_config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             );"
         ).ok();
 
@@ -1568,6 +1572,22 @@ impl Database {
 
     pub fn delete_sync_conflict(&self, conversation_id: &str) -> Result<(), rusqlite::Error> {
         self.conn.execute("DELETE FROM sync_conflicts WHERE conversation_id = ?1", params![conversation_id])?;
+        Ok(())
+    }
+
+    pub fn get_api_server_value(&self, key: &str) -> Option<String> {
+        self.conn.query_row(
+            "SELECT value FROM api_server_config WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        ).ok()
+    }
+
+    pub fn set_api_server_value(&self, key: &str, value: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO api_server_config (key, value) VALUES (?1, ?2)",
+            params![key, value],
+        )?;
         Ok(())
     }
 }
