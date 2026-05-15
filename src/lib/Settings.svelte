@@ -65,7 +65,7 @@
   let gitAvailability = $state(null);
 
   // Sync (Phase 15)
-  let syncConfig = $state({ enabled: false, repo_path: "", auto_sync_interval_mins: 0, commit_name: "LCD Sync", commit_email: "sync@linux-claude-desktop.local" });
+  let syncConfig = $state({ enabled: false, backend_type: "git", auto_sync_interval_mins: 0, repo_path: "", commit_name: "LCD Sync", commit_email: "sync@linux-claude-desktop.local", webdav_url: "", webdav_username: "", webdav_password: "", s3_endpoint: "", s3_bucket: "", s3_region: "us-east-1", s3_access_key: "", s3_secret_key: "" });
   let syncStatus = $state("idle"); // idle | syncing | success | error
   let syncResult = $state(null);
   let syncError = $state("");
@@ -680,6 +680,15 @@
       syncStatus = "success";
       setTimeout(() => { if (syncStatus === "success") syncStatus = "idle"; }, 5000);
     } catch (e) { syncError = String(e); syncStatus = "error"; }
+  }
+
+  async function testSyncConnection() {
+    syncStatus = "syncing"; syncError = "";
+    try {
+      await invoke("test_sync_connection", { config: syncConfig });
+      syncStatus = "testok";
+      setTimeout(() => { if (syncStatus === "testok") syncStatus = "idle"; }, 4000);
+    } catch (e) { syncError = String(e); syncStatus = "testerr"; }
   }
 
   async function loadPluginInfo() {
@@ -1696,8 +1705,8 @@
 
     {:else if activeSection === "sync"}
       <div class="section">
-        <h3>Git Sync</h3>
-        <p class="section-desc">Sync conversations across devices using a local or remote git repository. Each conversation is stored as a JSON file in <code>conversations/</code> inside the repo.</p>
+        <h3>Sync</h3>
+        <p class="section-desc">Sync conversations across devices. Each conversation is stored as a JSON file under a <code>conversations/</code> prefix in the configured backend.</p>
 
         <div class="card">
           <div class="setting-row">
@@ -1706,36 +1715,17 @@
               <input id="sync-enabled" type="checkbox" bind:checked={syncConfig.enabled} onchange={saveSyncConfig} />
             </div>
           </div>
-        </div>
-
-        {#if syncConfig.enabled}
-          <div class="card">
+          {#if syncConfig.enabled}
             <div class="setting-row">
-              <label for="sync-repo-path" class="setting-label">Repository Path</label>
-              <div class="setting-control" style="flex-direction: row; gap: 8px;">
-                <input
-                  id="sync-repo-path"
-                  type="text"
-                  class="text-input"
-                  placeholder="/home/user/my-sync-repo"
-                  bind:value={syncConfig.repo_path}
-                  onchange={saveSyncConfig}
-                  style="flex: 1;"
-                />
-                <button
-                  class="btn-secondary"
-                  onclick={async () => {
-                    const selected = await openDialog({ directory: true, title: "Select Sync Repository" });
-                    if (selected) { syncConfig = { ...syncConfig, repo_path: selected }; await saveSyncConfig(); }
-                  }}
-                >Browse</button>
-                <button class="btn-secondary" onclick={initSyncRepo} title="Initialize a new git repo at this path">Init</button>
+              <label for="sync-backend" class="setting-label">Backend</label>
+              <div class="setting-control">
+                <select id="sync-backend" bind:value={syncConfig.backend_type} onchange={saveSyncConfig}>
+                  <option value="git">Git repository</option>
+                  <option value="webdav">WebDAV (Nextcloud, ownCloud…)</option>
+                  <option value="s3">S3-compatible (AWS, MinIO, Backblaze B2…)</option>
+                </select>
               </div>
-              <p class="setting-description">Local path to the git repository. Can have a remote (GitHub, GitLab, Gitea, etc.) for cross-device sync.</p>
             </div>
-          </div>
-
-          <div class="card">
             <div class="setting-row">
               <label for="sync-interval" class="setting-label">Auto-sync Interval</label>
               <div class="setting-control">
@@ -1748,27 +1738,134 @@
                 </select>
               </div>
             </div>
-            <div class="setting-row">
-              <label for="sync-commit-name" class="setting-label">Commit Name</label>
-              <div class="setting-control">
-                <input id="sync-commit-name" type="text" class="text-input" bind:value={syncConfig.commit_name} onchange={saveSyncConfig} />
-              </div>
-            </div>
-            <div class="setting-row">
-              <label for="sync-commit-email" class="setting-label">Commit Email</label>
-              <div class="setting-control">
-                <input id="sync-commit-email" type="text" class="text-input" bind:value={syncConfig.commit_email} onchange={saveSyncConfig} />
-              </div>
-            </div>
-          </div>
+          {/if}
+        </div>
 
+        {#if syncConfig.enabled}
+          <!-- Git backend -->
+          {#if syncConfig.backend_type === "git"}
+            <div class="card">
+              <div class="setting-row">
+                <label for="sync-repo-path" class="setting-label">Repository Path</label>
+                <div class="setting-control" style="flex-direction: row; gap: 8px;">
+                  <input id="sync-repo-path" type="text" class="text-input"
+                    placeholder="/home/user/my-sync-repo"
+                    bind:value={syncConfig.repo_path} onchange={saveSyncConfig} style="flex: 1;" />
+                  <button class="btn-secondary" onclick={async () => {
+                    const selected = await openDialog({ directory: true, title: "Select Sync Repository" });
+                    if (selected) { syncConfig = { ...syncConfig, repo_path: selected }; await saveSyncConfig(); }
+                  }}>Browse</button>
+                  <button class="btn-secondary" onclick={initSyncRepo} title="Initialize a new git repo at this path">Init</button>
+                </div>
+                <p class="setting-description">Local git repo. Add a remote (GitHub, GitLab, Gitea) for cross-device sync.</p>
+              </div>
+              <div class="setting-row">
+                <label for="sync-commit-name" class="setting-label">Commit Name</label>
+                <div class="setting-control">
+                  <input id="sync-commit-name" type="text" class="text-input" bind:value={syncConfig.commit_name} onchange={saveSyncConfig} />
+                </div>
+              </div>
+              <div class="setting-row">
+                <label for="sync-commit-email" class="setting-label">Commit Email</label>
+                <div class="setting-control">
+                  <input id="sync-commit-email" type="text" class="text-input" bind:value={syncConfig.commit_email} onchange={saveSyncConfig} />
+                </div>
+              </div>
+            </div>
+          {/if}
+
+          <!-- WebDAV backend -->
+          {#if syncConfig.backend_type === "webdav"}
+            <div class="card">
+              <div class="setting-row">
+                <label for="sync-webdav-url" class="setting-label">WebDAV URL</label>
+                <div class="setting-control">
+                  <input id="sync-webdav-url" type="text" class="text-input"
+                    placeholder="https://nextcloud.example.com/remote.php/dav/files/user/LCD"
+                    bind:value={syncConfig.webdav_url} onchange={saveSyncConfig} />
+                </div>
+                <p class="setting-description">Full URL to the base WebDAV directory. A <code>conversations/</code> subdirectory will be created here.</p>
+              </div>
+              <div class="setting-row">
+                <label for="sync-webdav-user" class="setting-label">Username</label>
+                <div class="setting-control">
+                  <input id="sync-webdav-user" type="text" class="text-input" bind:value={syncConfig.webdav_username} onchange={saveSyncConfig} />
+                </div>
+              </div>
+              <div class="setting-row">
+                <label for="sync-webdav-pass" class="setting-label">Password / App Token</label>
+                <div class="setting-control">
+                  <input id="sync-webdav-pass" type="password" class="text-input" bind:value={syncConfig.webdav_password} onchange={saveSyncConfig} />
+                </div>
+              </div>
+              <div class="db-actions" style="margin-top: 8px;">
+                <button class="btn-secondary" onclick={testSyncConnection} disabled={syncStatus === "syncing"}>Test Connection</button>
+              </div>
+              {#if syncStatus === "testok"}
+                <div class="status-msg success">Connected successfully.</div>
+              {:else if syncStatus === "testerr"}
+                <div class="status-msg error">{syncError}</div>
+              {/if}
+            </div>
+          {/if}
+
+          <!-- S3 backend -->
+          {#if syncConfig.backend_type === "s3"}
+            <div class="card">
+              <div class="setting-row">
+                <label for="sync-s3-endpoint" class="setting-label">Endpoint URL</label>
+                <div class="setting-control">
+                  <input id="sync-s3-endpoint" type="text" class="text-input"
+                    placeholder="https://s3.amazonaws.com (leave blank for AWS)"
+                    bind:value={syncConfig.s3_endpoint} onchange={saveSyncConfig} />
+                </div>
+                <p class="setting-description">Leave blank for AWS S3. For MinIO / Backblaze / DigitalOcean Spaces, enter their endpoint URL.</p>
+              </div>
+              <div class="setting-row">
+                <label for="sync-s3-bucket" class="setting-label">Bucket</label>
+                <div class="setting-control">
+                  <input id="sync-s3-bucket" type="text" class="text-input" bind:value={syncConfig.s3_bucket} onchange={saveSyncConfig} />
+                </div>
+              </div>
+              <div class="setting-row">
+                <label for="sync-s3-region" class="setting-label">Region</label>
+                <div class="setting-control">
+                  <input id="sync-s3-region" type="text" class="text-input"
+                    placeholder="us-east-1"
+                    bind:value={syncConfig.s3_region} onchange={saveSyncConfig} />
+                </div>
+              </div>
+              <div class="setting-row">
+                <label for="sync-s3-key" class="setting-label">Access Key ID</label>
+                <div class="setting-control">
+                  <input id="sync-s3-key" type="text" class="text-input" bind:value={syncConfig.s3_access_key} onchange={saveSyncConfig} />
+                </div>
+              </div>
+              <div class="setting-row">
+                <label for="sync-s3-secret" class="setting-label">Secret Access Key</label>
+                <div class="setting-control">
+                  <input id="sync-s3-secret" type="password" class="text-input" bind:value={syncConfig.s3_secret_key} onchange={saveSyncConfig} />
+                </div>
+              </div>
+              <div class="db-actions" style="margin-top: 8px;">
+                <button class="btn-secondary" onclick={testSyncConnection} disabled={syncStatus === "syncing"}>Test Connection</button>
+              </div>
+              {#if syncStatus === "testok"}
+                <div class="status-msg success">Connected successfully.</div>
+              {:else if syncStatus === "testerr"}
+                <div class="status-msg error">{syncError}</div>
+              {/if}
+            </div>
+          {/if}
+
+          <!-- Sync actions (all backends) -->
           <div class="card">
             <div class="db-actions">
               <button class="btn-action" onclick={runSyncNow} disabled={syncStatus === "syncing"}>
                 {syncStatus === "syncing" ? "Syncing..." : "Sync Now"}
               </button>
-              <button class="btn-action" onclick={runSyncPush} disabled={syncStatus === "syncing"} title="Push local changes to repo">Push</button>
-              <button class="btn-action" onclick={runSyncPull} disabled={syncStatus === "syncing"} title="Pull remote changes into local">Pull</button>
+              <button class="btn-action" onclick={runSyncPush} disabled={syncStatus === "syncing"} title="Upload local changes">Push</button>
+              <button class="btn-action" onclick={runSyncPull} disabled={syncStatus === "syncing"} title="Download remote changes">Pull</button>
             </div>
             {#if syncStatus === "success" && syncResult}
               <div class="status-msg success">
