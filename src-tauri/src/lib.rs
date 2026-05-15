@@ -7,6 +7,7 @@ mod git;
 mod mcp;
 mod plugins;
 mod providers;
+mod sync;
 mod terminal;
 
 use chrono;
@@ -138,6 +139,38 @@ pub fn run() {
                                 }
                             }
                         }
+                    }
+                }
+            });
+
+            // Auto-sync background task (checks every 60s, respects interval setting)
+            let app_handle4 = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    let state = app_handle4.state::<AppState>();
+                    let config = sync::get_sync_config(state.clone());
+                    if !config.enabled || config.auto_sync_interval_mins == 0 || config.repo_path.is_empty() {
+                        continue;
+                    }
+                    let interval_secs = config.auto_sync_interval_mins as u64 * 60;
+                    let last_synced_at = state.db.lock().unwrap()
+                        .get_sync_value("last_auto_synced_at")
+                        .unwrap_or_default();
+                    let should_run = if last_synced_at.is_empty() {
+                        true
+                    } else {
+                        chrono::DateTime::parse_from_rfc3339(&last_synced_at)
+                            .map(|t| {
+                                let elapsed = chrono::Utc::now().signed_duration_since(t.with_timezone(&chrono::Utc));
+                                elapsed.num_seconds() as u64 >= interval_secs
+                            })
+                            .unwrap_or(true)
+                    };
+                    if should_run {
+                        let _ = sync::sync_now(state.clone());
+                        let now = chrono::Utc::now().to_rfc3339();
+                        let _ = state.db.lock().unwrap().set_sync_value("last_auto_synced_at", &now);
                     }
                 }
             });
@@ -318,6 +351,12 @@ pub fn run() {
             db::touch_git_repo,
             db::get_git_default_repo,
             db::set_git_default_repo,
+            sync::get_sync_config,
+            sync::set_sync_config,
+            sync::init_sync_repo,
+            sync::sync_push,
+            sync::sync_pull,
+            sync::sync_now,
             plugins::get_plugins_dir,
             plugins::list_plugins,
             plugins::read_plugin_source,

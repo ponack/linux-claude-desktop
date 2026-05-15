@@ -22,6 +22,7 @@
     { id: "accessibility", label: "Accessibility", icon: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z M12 9a3 3 0 100 6 3 3 0 000-6z" },
     { id: "computeruse", label: "Computer Use", icon: "M2 3h20v14H2z M8 21h8M12 17v4" },
     { id: "git", label: "Git", icon: "M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 9v6M15.4 6.4A8 8 0 0 1 21 13v2" },
+    { id: "sync", label: "Sync", icon: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" },
     { id: "plugins", label: "Plugins", icon: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" },
     { id: "about", label: "About", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 16v-4 M12 8h.01" },
   ];
@@ -62,6 +63,12 @@
   // Git settings
   let gitDefaultRepo = $state("");
   let gitAvailability = $state(null);
+
+  // Sync (Phase 15)
+  let syncConfig = $state({ enabled: false, repo_path: "", auto_sync_interval_mins: 0, commit_name: "LCD Sync", commit_email: "sync@linux-claude-desktop.local" });
+  let syncStatus = $state("idle"); // idle | syncing | success | error
+  let syncResult = $state(null);
+  let syncError = $state("");
 
   // Plugins (Phase 14)
   let pluginScan = $state({ plugins: [], errors: [] });
@@ -242,6 +249,7 @@
         cuAvailability = await invoke("check_computer_use_available");
         gitDefaultRepo = await invoke("get_git_default_repo").catch(() => "");
         gitAvailability = await invoke("check_git_available").catch(() => null);
+        syncConfig = await invoke("get_sync_config").catch(() => syncConfig);
         await loadPluginInfo();
       } catch (_) {}
 
@@ -633,6 +641,46 @@
   async function saveWhisperModelPath() { await invoke("set_whisper_model_path", { path: whisperModelPath }); }
   async function saveCuModel() { await invoke("set_cu_model", { model: cuModel }); }
   async function saveGitDefaultRepo() { await invoke("set_git_default_repo", { path: gitDefaultRepo }); }
+
+  async function saveSyncConfig() {
+    try {
+      await invoke("set_sync_config", { config: syncConfig });
+    } catch (e) { console.error("Failed to save sync config:", e); }
+  }
+
+  async function initSyncRepo() {
+    if (!syncConfig.repo_path) return;
+    try {
+      await invoke("init_sync_repo", { path: syncConfig.repo_path });
+    } catch (e) { syncError = String(e); }
+  }
+
+  async function runSyncNow() {
+    syncStatus = "syncing"; syncError = ""; syncResult = null;
+    try {
+      syncResult = await invoke("sync_now");
+      syncStatus = "success";
+      setTimeout(() => { if (syncStatus === "success") syncStatus = "idle"; }, 5000);
+    } catch (e) { syncError = String(e); syncStatus = "error"; }
+  }
+
+  async function runSyncPush() {
+    syncStatus = "syncing"; syncError = ""; syncResult = null;
+    try {
+      syncResult = await invoke("sync_push");
+      syncStatus = "success";
+      setTimeout(() => { if (syncStatus === "success") syncStatus = "idle"; }, 5000);
+    } catch (e) { syncError = String(e); syncStatus = "error"; }
+  }
+
+  async function runSyncPull() {
+    syncStatus = "syncing"; syncError = ""; syncResult = null;
+    try {
+      syncResult = await invoke("sync_pull");
+      syncStatus = "success";
+      setTimeout(() => { if (syncStatus === "success") syncStatus = "idle"; }, 5000);
+    } catch (e) { syncError = String(e); syncStatus = "error"; }
+  }
 
   async function loadPluginInfo() {
     try {
@@ -1642,6 +1690,101 @@
               </div>
               <p class="setting-description">The repository opened by default when you launch the Git view (Ctrl+Shift+G).</p>
             </div>
+          </div>
+        {/if}
+      </div>
+
+    {:else if activeSection === "sync"}
+      <div class="section">
+        <h3>Git Sync</h3>
+        <p class="section-desc">Sync conversations across devices using a local or remote git repository. Each conversation is stored as a JSON file in <code>conversations/</code> inside the repo.</p>
+
+        <div class="card">
+          <div class="setting-row">
+            <label for="sync-enabled" class="setting-label">Enable Sync</label>
+            <div class="setting-control">
+              <input id="sync-enabled" type="checkbox" bind:checked={syncConfig.enabled} onchange={saveSyncConfig} />
+            </div>
+          </div>
+        </div>
+
+        {#if syncConfig.enabled}
+          <div class="card">
+            <div class="setting-row">
+              <label for="sync-repo-path" class="setting-label">Repository Path</label>
+              <div class="setting-control" style="flex-direction: row; gap: 8px;">
+                <input
+                  id="sync-repo-path"
+                  type="text"
+                  class="text-input"
+                  placeholder="/home/user/my-sync-repo"
+                  bind:value={syncConfig.repo_path}
+                  onchange={saveSyncConfig}
+                  style="flex: 1;"
+                />
+                <button
+                  class="btn-secondary"
+                  onclick={async () => {
+                    const selected = await openDialog({ directory: true, title: "Select Sync Repository" });
+                    if (selected) { syncConfig = { ...syncConfig, repo_path: selected }; await saveSyncConfig(); }
+                  }}
+                >Browse</button>
+                <button class="btn-secondary" onclick={initSyncRepo} title="Initialize a new git repo at this path">Init</button>
+              </div>
+              <p class="setting-description">Local path to the git repository. Can have a remote (GitHub, GitLab, Gitea, etc.) for cross-device sync.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="setting-row">
+              <label for="sync-interval" class="setting-label">Auto-sync Interval</label>
+              <div class="setting-control">
+                <select id="sync-interval" bind:value={syncConfig.auto_sync_interval_mins} onchange={saveSyncConfig}>
+                  <option value={0}>Manual only</option>
+                  <option value={5}>Every 5 minutes</option>
+                  <option value={15}>Every 15 minutes</option>
+                  <option value={30}>Every 30 minutes</option>
+                  <option value={60}>Every hour</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-row">
+              <label for="sync-commit-name" class="setting-label">Commit Name</label>
+              <div class="setting-control">
+                <input id="sync-commit-name" type="text" class="text-input" bind:value={syncConfig.commit_name} onchange={saveSyncConfig} />
+              </div>
+            </div>
+            <div class="setting-row">
+              <label for="sync-commit-email" class="setting-label">Commit Email</label>
+              <div class="setting-control">
+                <input id="sync-commit-email" type="text" class="text-input" bind:value={syncConfig.commit_email} onchange={saveSyncConfig} />
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="db-actions">
+              <button class="btn-action" onclick={runSyncNow} disabled={syncStatus === "syncing"}>
+                {syncStatus === "syncing" ? "Syncing..." : "Sync Now"}
+              </button>
+              <button class="btn-action" onclick={runSyncPush} disabled={syncStatus === "syncing"} title="Push local changes to repo">Push</button>
+              <button class="btn-action" onclick={runSyncPull} disabled={syncStatus === "syncing"} title="Pull remote changes into local">Pull</button>
+            </div>
+            {#if syncStatus === "success" && syncResult}
+              <div class="status-msg success">
+                ↑ {syncResult.pushed} pushed &nbsp;·&nbsp; ↓ {syncResult.pulled} pulled
+                {#if syncResult.skipped > 0}&nbsp;·&nbsp; {syncResult.skipped} unchanged{/if}
+                {#if syncResult.errors.length > 0}&nbsp;·&nbsp; {syncResult.errors.length} error(s){/if}
+              </div>
+            {/if}
+            {#if syncResult?.errors?.length > 0}
+              {#each syncResult.errors as err}
+                <div class="status-msg error" style="font-size: 12px;">{err}</div>
+              {/each}
+            {/if}
+            {#if syncStatus === "error"}
+              <div class="status-msg error">{syncError}</div>
+            {/if}
           </div>
         {/if}
       </div>

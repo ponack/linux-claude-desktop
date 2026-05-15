@@ -411,6 +411,18 @@ impl Database {
             );"
         ).ok();
 
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS sync_config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS sync_state (
+                conversation_id TEXT PRIMARY KEY,
+                last_synced_updated_at TEXT NOT NULL,
+                synced_at TEXT NOT NULL
+            );"
+        ).ok();
+
         Ok(Self { conn })
     }
 
@@ -1420,6 +1432,98 @@ impl Database {
         )?;
         Ok(())
     }
+
+    // ── Sync config ───────────────────────────────────────────────────────────
+
+    pub fn get_sync_value(&self, key: &str) -> Option<String> {
+        self.conn.query_row(
+            "SELECT value FROM sync_config WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        ).ok()
+    }
+
+    pub fn set_sync_value(&self, key: &str, value: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO sync_config (key, value) VALUES (?1, ?2)",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+
+    // ── Sync state ────────────────────────────────────────────────────────────
+
+    pub fn get_sync_state(&self, conversation_id: &str) -> Option<String> {
+        self.conn.query_row(
+            "SELECT last_synced_updated_at FROM sync_state WHERE conversation_id = ?1",
+            params![conversation_id],
+            |row| row.get(0),
+        ).ok()
+    }
+
+    pub fn set_sync_state(&self, conversation_id: &str, last_synced_updated_at: &str, synced_at: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO sync_state (conversation_id, last_synced_updated_at, synced_at) VALUES (?1, ?2, ?3)",
+            params![conversation_id, last_synced_updated_at, synced_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_all_sync_states(&self) -> std::collections::HashMap<String, String> {
+        let mut stmt = match self.conn.prepare(
+            "SELECT conversation_id, last_synced_updated_at FROM sync_state"
+        ) {
+            Ok(s) => s,
+            Err(_) => return std::collections::HashMap::new(),
+        };
+        let rows = match stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))) {
+            Ok(r) => r,
+            Err(_) => return std::collections::HashMap::new(),
+        };
+        rows.filter_map(|r| r.ok()).collect()
+    }
+
+    pub fn upsert_synced_conversation(
+        &self,
+        id: &str,
+        title: &str,
+        created_at: &str,
+        messages: &[crate::db::ExportedMessage],
+    ) -> Result<bool, rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let exists: bool = self.conn.query_row(
+            "SELECT COUNT(*) FROM conversations WHERE id = ?1",
+            params![id],
+            |row| row.get::<_, i64>(0),
+        ).unwrap_or(0) > 0;
+
+        if exists {
+            // Overwrite messages (remote wins)
+            self.conn.execute(
+                "DELETE FROM messages WHERE conversation_id = ?1",
+                params![id],
+            )?;
+            self.conn.execute(
+                "UPDATE conversations SET title = ?1, updated_at = ?2 WHERE id = ?3",
+                params![title, now, id],
+            )?;
+        } else {
+            self.conn.execute(
+                "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
+                params![id, title, created_at, now],
+            )?;
+        }
+
+        for msg in messages {
+            let msg_id = uuid::Uuid::new_v4().to_string();
+            self.conn.execute(
+                "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![msg_id, id, msg.role, msg.content, msg.created_at],
+            )?;
+        }
+
+        Ok(!exists)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1810,6 +1914,10 @@ pub fn set_conversation_project(state: tauri::State<AppState>, conversation_id: 
 #[tauri::command]
 pub fn get_conversation_project(state: tauri::State<AppState>, conversation_id: String) -> Result<Option<String>, String> {
     state.db.lock().unwrap().get_conversation_project_id(&conversation_id).map_err(|e| e.to_string())
+}
+
+pub fn do_export_conversation_pub(db: &Database, conversation_id: &str, format: &str) -> Result<String, String> {
+    do_export_conversation(db, conversation_id, format)
 }
 
 fn do_export_conversation(db: &Database, conversation_id: &str, format: &str) -> Result<String, String> {
