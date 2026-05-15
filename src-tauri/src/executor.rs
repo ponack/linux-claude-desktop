@@ -96,7 +96,7 @@ pub async fn execute_code(
     let code_file = format!("{tmp_dir}/code.{ext}");
     std::fs::write(&code_file, &code).map_err(|e| e.to_string())?;
 
-    let mut child = std::process::Command::new(cmd)
+    let child = std::process::Command::new(cmd)
         .arg(&code_file)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

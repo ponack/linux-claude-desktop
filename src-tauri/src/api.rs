@@ -123,12 +123,10 @@ fn resolve_provider(state: &AppState, project_id: Option<&str>) -> Result<Resolv
                 .or_else(|| db.get_setting("model").ok().flatten())
                 .unwrap_or_else(|| "claude-sonnet-4-6".to_string());
             Ok(ResolvedProvider {
-                provider_type: ProviderType::Anthropic,
                 api_key,
                 base_url: "https://api.anthropic.com".to_string(),
                 model,
                 api_format: "anthropic".to_string(),
-                endpoint_id: None,
             })
         }
         ProviderType::OpenAI => {
@@ -143,12 +141,10 @@ fn resolve_provider(state: &AppState, project_id: Option<&str>) -> Result<Resolv
                 .or_else(|| db.get_setting("model").ok().flatten())
                 .unwrap_or_else(|| "gpt-4o".to_string());
             Ok(ResolvedProvider {
-                provider_type: ProviderType::OpenAI,
                 api_key,
                 base_url,
                 model,
                 api_format: "openai".to_string(),
-                endpoint_id: None,
             })
         }
         ProviderType::Ollama => {
@@ -159,12 +155,10 @@ fn resolve_provider(state: &AppState, project_id: Option<&str>) -> Result<Resolv
                 .or_else(|| db.get_setting("model").ok().flatten())
                 .unwrap_or_else(|| "llama3.2".to_string());
             Ok(ResolvedProvider {
-                provider_type: ProviderType::Ollama,
                 api_key: String::new(),
                 base_url,
                 model,
                 api_format: "openai".to_string(),
-                endpoint_id: None,
             })
         }
         ProviderType::Custom => {
@@ -179,12 +173,10 @@ fn resolve_provider(state: &AppState, project_id: Option<&str>) -> Result<Resolv
                 .or_else(|| db.get_setting("model").ok().flatten())
                 .unwrap_or_else(|| endpoint.default_model.clone());
             Ok(ResolvedProvider {
-                provider_type: ProviderType::Custom,
                 api_key: endpoint.api_key,
                 base_url: endpoint.base_url,
                 model,
                 api_format: endpoint.api_format,
-                endpoint_id: Some(endpoint.id),
             })
         }
     }
@@ -1334,12 +1326,10 @@ fn resolve_comparison_provider(state: &AppState, target: &ComparisonTarget) -> R
             let api_key = db.get_setting("api_key").map_err(|e| e.to_string())?
                 .ok_or_else(|| "Anthropic API key not set".to_string())?;
             Ok(ResolvedProvider {
-                provider_type: ProviderType::Anthropic,
                 api_key,
                 base_url: "https://api.anthropic.com".to_string(),
                 model: target.model.clone(),
                 api_format: "anthropic".to_string(),
-                endpoint_id: None,
             })
         }
         ProviderType::OpenAI => {
@@ -1348,24 +1338,20 @@ fn resolve_comparison_provider(state: &AppState, target: &ComparisonTarget) -> R
             let base_url = db.get_setting("openai_base_url").map_err(|e| e.to_string())?
                 .unwrap_or_else(|| "https://api.openai.com".to_string());
             Ok(ResolvedProvider {
-                provider_type: ProviderType::OpenAI,
                 api_key,
                 base_url,
                 model: target.model.clone(),
                 api_format: "openai".to_string(),
-                endpoint_id: None,
             })
         }
         ProviderType::Ollama => {
             let base_url = db.get_setting("ollama_base_url").map_err(|e| e.to_string())?
                 .unwrap_or_else(|| "http://localhost:11434".to_string());
             Ok(ResolvedProvider {
-                provider_type: ProviderType::Ollama,
                 api_key: String::new(),
                 base_url,
                 model: target.model.clone(),
                 api_format: "openai".to_string(),
-                endpoint_id: None,
             })
         }
         ProviderType::Custom => {
@@ -1375,12 +1361,10 @@ fn resolve_comparison_provider(state: &AppState, target: &ComparisonTarget) -> R
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| "Custom endpoint not found".to_string())?;
             Ok(ResolvedProvider {
-                provider_type: ProviderType::Custom,
                 api_key: endpoint.api_key,
                 base_url: endpoint.base_url,
                 model: if target.model.is_empty() { endpoint.default_model } else { target.model.clone() },
                 api_format: endpoint.api_format,
-                endpoint_id: Some(endpoint.id),
             })
         }
     }

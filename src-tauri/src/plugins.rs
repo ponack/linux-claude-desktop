@@ -148,12 +148,13 @@ pub fn set_plugin_enabled(
 }
 
 #[tauri::command]
-pub fn open_plugins_folder(app: tauri::AppHandle) -> Result<(), String> {
-    use tauri_plugin_shell::ShellExt;
+pub fn open_plugins_folder() -> Result<(), String> {
     let dir = get_plugins_dir();
-    app.shell()
-        .open(dir, None)
-        .map_err(|e| e.to_string())
+    std::process::Command::new("xdg-open")
+        .arg(&dir)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to launch xdg-open: {e}"))
 }
 
 // ── Install / Uninstall ───────────────────────────────────────────────────────
