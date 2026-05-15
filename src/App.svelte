@@ -14,6 +14,7 @@
   import TerminalView from "./lib/TerminalView.svelte";
   import GitView from "./lib/GitView.svelte";
   import CommandPalette from "./lib/CommandPalette.svelte";
+  import Toast from "./lib/Toast.svelte";
   import { initPlugins } from "./lib/plugins.js";
 
   let currentView = $state("chat");
@@ -326,6 +327,8 @@
     onOpenSettings={openSettings}
   />
 {/if}
+
+<Toast />
 
 <style>
   .app-layout {

@@ -1,28 +1,62 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Plugin host runtime — Phase 14 PR 1
+// Plugin host runtime
 //
-// Responsibilities:
-//   • Discover installed plugins via the `list_plugins` Tauri command
-//   • Load each enabled plugin's source file as an ES module (via Blob URL,
-//     since dynamic import of file:// paths is blocked in the webview)
-//   • Build a per-plugin `lcd` API object and call the module's `activate(lcd)`
-//   • Track activation errors so the Settings UI can surface them
+// PR 1: Loader, lifecycle, event bus skeleton.
+// PR 2: Interactive API — registerCommand, storage, notify, invoke.
+// PR 3 (planned): emit core events into the bus (message:before-send, etc.)
+// PR 4 (planned): registerArtifactType for custom artifact renderers.
 //
-// PR 1 is intentionally narrow. The API surface exposed to plugins in this PR:
-//   lcd.version    (string)       — host app version
-//   lcd.log(...)                   — log to plugin console (visible in Settings)
-//   lcd.on(event, handler)         — subscribe to events (no events fire yet)
-//   lcd.off(event, handler)
-//   lcd.emit(event, payload)       — plugin-to-plugin/host bus
-//
-// PR 2 will add: lcd.registerCommand, lcd.storage, lcd.notify, lcd.invoke
-// PR 3 will emit core events (message:before-send, response:chunk, etc.)
-// PR 4 will add: lcd.registerArtifactType
+// `lcd` API surface (frozen, passed to each plugin's activate()):
+//   version           string  — host app version
+//   pluginId          string
+//   log(...args)              — append to plugin console (Settings panel)
+//   on(event, fn)             — subscribe to host/plugin events
+//   off(event, fn)
+//   emit(event, payload)      — emit on the bus
+//   registerCommand({name, description, handler})
+//                             — adds a slash command + palette entry
+//   storage.get(key)          — Promise<any | null>
+//   storage.set(key, value)   — Promise<void>; value JSON-serialised
+//   storage.delete(key)
+//   storage.list()            — Promise<string[]>
+//   notify(message, level?)   — toast notification (info|success|warning|error)
+//   invoke(name, args?)       — call a whitelisted Tauri command
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { invoke } from "@tauri-apps/api/core";
+import { showToast } from "./toast.js";
 
 const HOST_VERSION = "0.9.4";
+
+// Whitelist of Tauri commands a plugin may call via lcd.invoke().
+// Keep this conservative — every entry here is part of the public plugin API.
+const INVOKE_WHITELIST = new Set([
+  "get_app_info",
+  "get_conversations",
+  "get_messages",
+  "get_provider",
+  "get_model",
+]);
+
+// Plugin commands keyed by plugin id, then command name.
+// Shape: Map<pluginId, Map<commandName, { description, handler }>>
+const pluginCommands = new Map();
+
+// Listeners notified whenever the command registry changes (after activate /
+// deactivate / reload). Chat.svelte subscribes so its slash-command picker stays
+// in sync.
+const commandsChangeListeners = new Set();
+
+export function onPluginCommandsChanged(fn) {
+  commandsChangeListeners.add(fn);
+  return () => commandsChangeListeners.delete(fn);
+}
+
+function notifyCommandsChanged() {
+  for (const fn of commandsChangeListeners) {
+    try { fn(); } catch (e) { console.error("[plugins] commands listener threw:", e); }
+  }
+}
 
 // Registry of loaded plugins. Each entry:
 //   { id, manifest, module, lcd, logs: [], error?: string }
@@ -74,7 +108,36 @@ export async function emit(event, payload) {
   return current;
 }
 
-function buildLcd(pluginId, logSink) {
+function buildLcd(pluginId, logSink, permissions) {
+  const has = (perm) => permissions.includes(perm);
+  const requirePerm = (perm) => {
+    if (!has(perm)) {
+      throw new Error(`Plugin "${pluginId}" missing permission: ${perm}. Add it to manifest.json's "permissions" array.`);
+    }
+  };
+
+  const storage = Object.freeze({
+    async get(key) {
+      requirePerm("storage");
+      const raw = await invoke("plugin_storage_get", { pluginId, key: String(key) });
+      if (raw == null) return null;
+      try { return JSON.parse(raw); } catch { return raw; }
+    },
+    async set(key, value) {
+      requirePerm("storage");
+      const serialised = typeof value === "string" ? JSON.stringify(value) : JSON.stringify(value);
+      await invoke("plugin_storage_set", { pluginId, key: String(key), value: serialised });
+    },
+    async delete(key) {
+      requirePerm("storage");
+      await invoke("plugin_storage_delete", { pluginId, key: String(key) });
+    },
+    async list() {
+      requirePerm("storage");
+      return await invoke("plugin_storage_list_keys", { pluginId });
+    },
+  });
+
   return Object.freeze({
     version: HOST_VERSION,
     pluginId,
@@ -83,14 +146,31 @@ function buildLcd(pluginId, logSink) {
         .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
         .join(" ");
       logSink.push({ time: new Date().toISOString(), level: "info", msg });
-      // Cap log buffer per plugin
       if (logSink.length > 200) logSink.splice(0, logSink.length - 200);
-      // Also mirror to dev console
       console.log(`[plugin ${pluginId}]`, ...args);
     },
     on: (event, handler) => busOn(pluginId, event, handler),
     off: (event, handler) => busOff(pluginId, event, handler),
     emit: (event, payload) => emit(event, payload),
+    registerCommand: ({ name, description, handler }) => {
+      requirePerm("commands");
+      if (!name || typeof name !== "string") throw new Error("registerCommand: name required");
+      if (typeof handler !== "function") throw new Error("registerCommand: handler must be a function");
+      if (!pluginCommands.has(pluginId)) pluginCommands.set(pluginId, new Map());
+      pluginCommands.get(pluginId).set(name, { description: description || "", handler });
+    },
+    storage,
+    notify: (message, level = "info") => {
+      requirePerm("notify");
+      showToast(message, level);
+    },
+    invoke: async (cmd, args) => {
+      requirePerm("invoke");
+      if (!INVOKE_WHITELIST.has(cmd)) {
+        throw new Error(`lcd.invoke: "${cmd}" is not whitelisted. Allowed: ${Array.from(INVOKE_WHITELIST).join(", ")}`);
+      }
+      return await invoke(cmd, args || {});
+    },
   });
 }
 
@@ -101,7 +181,8 @@ async function activatePlugin(info) {
   if (loaded.has(id)) return;
 
   const logs = [];
-  const lcd = buildLcd(id, logs);
+  const permissions = Array.isArray(manifest.permissions) ? manifest.permissions : [];
+  const lcd = buildLcd(id, logs, permissions);
   const entry = { id, manifest, module: null, lcd, logs, error: null };
   loaded.set(id, entry);
 
@@ -136,6 +217,7 @@ async function deactivatePlugin(id) {
     console.error(`[plugin ${id}] deactivate threw:`, e);
   }
   busRemoveAllForPlugin(id);
+  pluginCommands.delete(id);
   loaded.delete(id);
 }
 
@@ -155,6 +237,7 @@ export async function initPlugins() {
   for (const info of scan.plugins) {
     if (info.enabled) await activatePlugin(info);
   }
+  notifyCommandsChanged();
   return scan;
 }
 
@@ -180,4 +263,35 @@ export function getLoadedState() {
     };
   }
   return out;
+}
+
+/**
+ * Flat list of every command currently registered by every active plugin.
+ * Each entry: { pluginId, pluginName, name, description, handler }.
+ * Consumed by Chat.svelte's slash-command picker and CommandPalette.
+ */
+export function getPluginCommands() {
+  const out = [];
+  for (const [pluginId, cmds] of pluginCommands) {
+    const entry = loaded.get(pluginId);
+    const pluginName = entry?.manifest?.name || pluginId;
+    for (const [name, { description, handler }] of cmds) {
+      out.push({ pluginId, pluginName, name, description, handler });
+    }
+  }
+  return out;
+}
+
+/**
+ * Invoke a plugin command by (pluginId, name). Returns whatever the handler
+ * returns. Errors are caught and rethrown so callers can show a chat-bubble
+ * error like they do for shell command failures.
+ */
+export async function runPluginCommand(pluginId, name, args) {
+  const cmds = pluginCommands.get(pluginId);
+  if (!cmds || !cmds.has(name)) {
+    throw new Error(`Plugin command not found: ${pluginId}/${name}`);
+  }
+  const { handler } = cmds.get(name);
+  return await handler(args);
 }
