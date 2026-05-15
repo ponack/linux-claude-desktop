@@ -388,6 +388,7 @@ pub fn run() {
             api_server::get_api_server_config,
             api_server::set_api_server_config,
             api_server::rotate_api_server_token,
+            api_server::generate_pairing_qr,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

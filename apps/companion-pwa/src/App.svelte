@@ -51,6 +51,17 @@
   }
 
   onMount(() => {
+    // Auto-connect from QR pairing URL params (?lcd_url=...&lcd_token=...)
+    const params = new URLSearchParams(window.location.search);
+    const lcdUrl = params.get("lcd_url");
+    const lcdToken = params.get("lcd_token");
+    if (lcdUrl && lcdToken) {
+      const paired = { url: lcdUrl, token: lcdToken };
+      saveConnection(paired);
+      conn = paired;
+      history.replaceState(null, "", window.location.pathname);
+    }
+
     const goOnline = () => {
       isOnline = true;
       flushQueue();
