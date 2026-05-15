@@ -420,6 +420,13 @@ impl Database {
                 conversation_id TEXT PRIMARY KEY,
                 last_synced_updated_at TEXT NOT NULL,
                 synced_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS sync_conflicts (
+                conversation_id TEXT PRIMARY KEY,
+                remote_json TEXT NOT NULL,
+                local_title TEXT NOT NULL DEFAULT '',
+                remote_title TEXT NOT NULL DEFAULT '',
+                detected_at TEXT NOT NULL
             );"
         ).ok();
 
@@ -1524,6 +1531,85 @@ impl Database {
 
         Ok(!exists)
     }
+
+    // ── Sync conflicts ────────────────────────────────────────────────────────
+
+    pub fn get_local_conversation_updated_at(&self, id: &str) -> Option<String> {
+        self.conn.query_row(
+            "SELECT updated_at FROM conversations WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        ).ok()
+    }
+
+    pub fn get_local_conversation_title(&self, id: &str) -> Option<String> {
+        self.conn.query_row(
+            "SELECT title FROM conversations WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        ).ok()
+    }
+
+    pub fn set_sync_conflict(&self, conversation_id: &str, remote_json: &str, local_title: &str, remote_title: &str, detected_at: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO sync_conflicts (conversation_id, remote_json, local_title, remote_title, detected_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![conversation_id, remote_json, local_title, remote_title, detected_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_sync_conflict_json(&self, conversation_id: &str) -> Option<String> {
+        self.conn.query_row(
+            "SELECT remote_json FROM sync_conflicts WHERE conversation_id = ?1",
+            params![conversation_id],
+            |row| row.get(0),
+        ).ok()
+    }
+
+    pub fn delete_sync_conflict(&self, conversation_id: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute("DELETE FROM sync_conflicts WHERE conversation_id = ?1", params![conversation_id])?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncConflict {
+    pub conversation_id: String,
+    pub local_title: String,
+    pub remote_title: String,
+    pub detected_at: String,
+}
+
+#[tauri::command]
+pub fn get_sync_conflicts(state: tauri::State<AppState>) -> Result<Vec<SyncConflict>, String> {
+    let db = state.db.lock().unwrap();
+    let mut stmt = db.conn.prepare(
+        "SELECT conversation_id, local_title, remote_title, detected_at FROM sync_conflicts ORDER BY detected_at DESC"
+    ).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| Ok(SyncConflict {
+        conversation_id: row.get(0)?,
+        local_title: row.get(1)?,
+        remote_title: row.get(2)?,
+        detected_at: row.get(3)?,
+    })).map_err(|e| e.to_string())?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+#[tauri::command]
+pub fn resolve_sync_conflict(state: tauri::State<AppState>, conversation_id: String, use_remote: bool) -> Result<(), String> {
+    let db = state.db.lock().unwrap();
+    if use_remote {
+        let remote_json = db.get_sync_conflict_json(&conversation_id)
+            .ok_or_else(|| format!("No conflict found for {conversation_id}"))?;
+        let exported: ExportedConversation = serde_json::from_str(&remote_json)
+            .map_err(|e| format!("Invalid remote JSON: {e}"))?;
+        db.upsert_synced_conversation(
+            &exported.id, &exported.title, &exported.created_at, &exported.messages,
+        ).map_err(|e| e.to_string())?;
+        let now = chrono::Utc::now().to_rfc3339();
+        let _ = db.set_sync_state(&conversation_id, &exported.updated_at, &now);
+    }
+    db.delete_sync_conflict(&conversation_id).map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1588,7 +1674,7 @@ pub struct TokenUsageSummary {
     pub message_count: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExportedConversation {
     #[serde(default = "default_export_version")]
     pub version: String,
@@ -1596,12 +1682,14 @@ pub struct ExportedConversation {
     pub id: String,
     pub title: String,
     pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
     pub messages: Vec<ExportedMessage>,
 }
 
 fn default_export_version() -> String { "1".to_string() }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ExportedMessage {
     pub role: String,
     pub content: String,
@@ -1953,7 +2041,8 @@ fn do_export_conversation(db: &Database, conversation_id: &str, format: &str) ->
                 version: "1".to_string(),
                 id: conv.id,
                 title: conv.title,
-                created_at: conv.created_at,
+                created_at: conv.created_at.clone(),
+                updated_at: conv.updated_at,
                 messages: messages.into_iter().map(|m| ExportedMessage {
                     role: m.role,
                     content: m.content,

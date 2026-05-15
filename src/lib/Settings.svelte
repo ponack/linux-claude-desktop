@@ -250,6 +250,7 @@
         gitDefaultRepo = await invoke("get_git_default_repo").catch(() => "");
         gitAvailability = await invoke("check_git_available").catch(() => null);
         syncConfig = await invoke("get_sync_config").catch(() => syncConfig);
+        await loadSyncConflicts();
         await loadPluginInfo();
       } catch (_) {}
 
@@ -660,6 +661,7 @@
     try {
       syncResult = await invoke("sync_now");
       syncStatus = "success";
+      await loadSyncConflicts();
       setTimeout(() => { if (syncStatus === "success") syncStatus = "idle"; }, 5000);
     } catch (e) { syncError = String(e); syncStatus = "error"; }
   }
@@ -678,6 +680,7 @@
     try {
       syncResult = await invoke("sync_pull");
       syncStatus = "success";
+      await loadSyncConflicts();
       setTimeout(() => { if (syncStatus === "success") syncStatus = "idle"; }, 5000);
     } catch (e) { syncError = String(e); syncStatus = "error"; }
   }
@@ -689,6 +692,21 @@
       syncStatus = "testok";
       setTimeout(() => { if (syncStatus === "testok") syncStatus = "idle"; }, 4000);
     } catch (e) { syncError = String(e); syncStatus = "testerr"; }
+  }
+
+  let syncConflicts = $state([]);
+
+  async function loadSyncConflicts() {
+    try {
+      syncConflicts = await invoke("get_sync_conflicts");
+    } catch (e) { syncConflicts = []; }
+  }
+
+  async function resolveConflict(conversationId, useRemote) {
+    try {
+      await invoke("resolve_sync_conflict", { conversationId, useRemote });
+      await loadSyncConflicts();
+    } catch (e) { console.error("Failed to resolve conflict:", e); }
   }
 
   async function loadPluginInfo() {
@@ -1883,6 +1901,35 @@
               <div class="status-msg error">{syncError}</div>
             {/if}
           </div>
+
+          <!-- Conflict resolution -->
+          {#if syncConflicts.length > 0}
+            <div class="card">
+              <h4 style="margin: 0 0 12px; font-size: 14px; color: var(--warning, #e8a838);">
+                ⚠ {syncConflicts.length} Sync Conflict{syncConflicts.length > 1 ? "s" : ""}
+              </h4>
+              <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 12px;">
+                Both local and remote versions changed since the last sync. Choose which version to keep for each conversation.
+              </p>
+              {#each syncConflicts as conflict}
+                <div class="conflict-row">
+                  <div class="conflict-titles">
+                    <span class="conflict-local" title="Local version">Local: {conflict.local_title}</span>
+                    <span class="conflict-sep">vs</span>
+                    <span class="conflict-remote" title="Remote version">Remote: {conflict.remote_title}</span>
+                  </div>
+                  <div class="conflict-actions">
+                    <button class="btn-secondary" onclick={() => resolveConflict(conflict.conversation_id, false)}>
+                      Keep Local
+                    </button>
+                    <button class="btn-secondary" onclick={() => resolveConflict(conflict.conversation_id, true)}>
+                      Use Remote
+                    </button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
         {/if}
       </div>
 
@@ -2400,6 +2447,30 @@
   .status-msg.success { background: rgba(78, 204, 163, 0.15); color: var(--success, #4ecca3); }
   .status-msg.error { background: rgba(233, 69, 96, 0.1); color: var(--danger); }
   .global-error { margin-top: 16px; }
+
+  /* --- Sync conflicts --- */
+  .conflict-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .conflict-row:last-child { border-bottom: none; }
+  .conflict-titles {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+  .conflict-local { color: var(--text-primary); }
+  .conflict-sep { color: var(--text-muted); font-size: 11px; }
+  .conflict-remote { color: var(--text-secondary); }
+  .conflict-actions {
+    display: flex;
+    gap: 8px;
+  }
 
   /* --- About --- */
   .about-card { gap: 0; }

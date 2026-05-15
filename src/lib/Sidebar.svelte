@@ -10,6 +10,19 @@
   let conversations = $state([]);
   let searchQuery = $state("");
 
+  // Sync status
+  let syncStatus = $state(null);
+  let syncTimestamp = $state(null);
+  let syncConflicts = $state(0);
+
+  function formatSyncTime(ts) {
+    if (!ts) return "";
+    const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+    if (diff < 60) return "just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return `${Math.floor(diff / 3600)}h ago`;
+  }
+
   // Update system
   let updateInfo = $state(null);
   let showUpdateDialog = $state(false);
@@ -42,10 +55,21 @@
     const unlisten = listen("update-progress", (event) => {
       downloadProgress = event.payload;
     });
+    const unlistenSync = listen("sync-status", (event) => {
+      const p = event.payload;
+      syncStatus = p.status;
+      if (p.timestamp) syncTimestamp = p.timestamp;
+      if (typeof p.conflicts === "number" && p.conflicts > 0) syncConflicts = p.conflicts;
+    });
+    const unlistenConflicts = listen("sync-conflicts", (event) => {
+      syncConflicts = event.payload.count;
+    });
 
     return () => {
       if (checkIntervalId) clearInterval(checkIntervalId);
       unlisten.then((fn) => fn());
+      unlistenSync.then((fn) => fn());
+      unlistenConflicts.then((fn) => fn());
     };
   });
 
@@ -218,6 +242,25 @@
   {/if}
 
   <div class="sidebar-footer">
+    {#if !collapsed && syncStatus}
+      <div class="sync-status-row">
+        {#if syncStatus === "syncing"}
+          <span class="sync-spinner" aria-label="Syncing">⟳</span>
+          <span class="sync-label">Syncing…</span>
+        {:else if syncStatus === "done" || syncStatus === "done_with_errors"}
+          <span class="sync-ok" aria-label="Sync OK">✓</span>
+          <span class="sync-label">Synced {formatSyncTime(syncTimestamp)}</span>
+          {#if syncConflicts > 0}
+            <button class="sync-conflict-badge" onclick={openSettings} title="{syncConflicts} conflict{syncConflicts > 1 ? 's' : ''} — open Settings to resolve">
+              {syncConflicts}
+            </button>
+          {/if}
+        {:else if syncStatus === "error"}
+          <span class="sync-error-dot" aria-label="Sync error" title="Sync failed"></span>
+          <span class="sync-label">Sync failed</span>
+        {/if}
+      </div>
+    {/if}
     {#if !collapsed && updateInfo}
       <button class="update-banner" onclick={openUpdateDialog} aria-label="Update available: version {updateInfo.latest_version}">
         Update available: v{updateInfo.latest_version}
@@ -558,6 +601,61 @@
   .sidebar-footer {
     padding: 12px;
     border-top: 1px solid var(--border);
+  }
+
+  .sync-status-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 4px 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .sync-spinner {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+    font-size: 13px;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .sync-ok {
+    color: var(--success);
+    font-size: 12px;
+  }
+
+  .sync-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sync-error-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--danger);
+    flex-shrink: 0;
+  }
+
+  .sync-conflict-badge {
+    background: var(--warning, #e8a838);
+    color: #000;
+    border-radius: 9px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .sync-conflict-badge:hover {
+    opacity: 0.85;
   }
 
   .update-banner {
