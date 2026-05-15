@@ -2,7 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { open } from "@tauri-apps/plugin-dialog";
+  import { open, save } from "@tauri-apps/plugin-dialog";
   import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
   import { onMount, onDestroy, tick } from "svelte";
   import MessageBubble from "./MessageBubble.svelte";
@@ -775,18 +775,13 @@ Be thorough in each step. Do not skip steps or combine them.`;
   async function exportConversation(format) {
     if (!conversationId) return;
     try {
-      const content = await invoke("export_conversation", {
-        conversationId,
-        format,
-      });
       const ext = format === "json" ? "json" : "md";
-      const blob = new Blob([content], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `conversation.${ext}`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const path = await save({
+        defaultPath: `conversation.${ext}`,
+        filters: [{ name: format === "json" ? "JSON" : "Markdown", extensions: [ext] }],
+      });
+      if (!path) return;
+      await invoke("export_conversation_to_file", { conversationId, path, format });
     } catch (e) {
       console.error("Export failed:", e);
     }

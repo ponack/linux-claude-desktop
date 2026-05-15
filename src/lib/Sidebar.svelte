@@ -1,10 +1,11 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { emit as emitPluginEvent } from "./plugins.js";
 
-  let { activeConversationId, onSelect, onNewChat, openSettings, openComparison, openComputerUse, openExtensions, openTerminal, openGit, onBackToChat, currentView = "chat", refreshKey, collapsed = false } = $props();
+  let { activeConversationId, onSelect, onNewChat, onImportConversation, openSettings, openComparison, openComputerUse, openExtensions, openTerminal, openGit, onBackToChat, currentView = "chat", refreshKey, collapsed = false } = $props();
 
   let conversations = $state([]);
   let searchQuery = $state("");
@@ -147,6 +148,22 @@
       console.error("Failed to delete:", err);
     }
   }
+
+  async function importConversation() {
+    try {
+      const path = await openDialog({
+        filters: [{ name: "Conversation JSON", extensions: ["json"] }],
+        multiple: false,
+      });
+      if (!path) return;
+      const filePath = typeof path === "string" ? path : path.path;
+      const newId = await invoke("import_conversation_from_file", { path: filePath });
+      await loadConversations();
+      onImportConversation?.(newId);
+    } catch (e) {
+      console.error("Import failed:", e);
+    }
+  }
 </script>
 
 <aside class="sidebar" class:collapsed aria-label="Conversations sidebar">
@@ -158,9 +175,14 @@
       {/if}
     </div>
     {#if !collapsed}
-      <button class="new-chat-btn" onclick={onNewChat} aria-label="Start new chat">
-        + New Chat
-      </button>
+      <div class="new-chat-row">
+        <button class="new-chat-btn" onclick={onNewChat} aria-label="Start new chat">
+          + New Chat
+        </button>
+        <button class="import-btn" onclick={importConversation} title="Import conversation from JSON" aria-label="Import conversation">
+          ↑
+        </button>
+      </div>
     {/if}
   </div>
 
@@ -427,8 +449,13 @@
     letter-spacing: 0.5px;
   }
 
+  .new-chat-row {
+    display: flex;
+    gap: 6px;
+  }
+
   .new-chat-btn {
-    width: 100%;
+    flex: 1;
     padding: 10px;
     background: var(--accent);
     color: white;
@@ -440,6 +467,22 @@
 
   .new-chat-btn:hover {
     background: var(--accent-hover);
+  }
+
+  .import-btn {
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 16px;
+    transition: background 0.2s, color 0.2s;
+    flex-shrink: 0;
+  }
+
+  .import-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text);
   }
 
   .search-box {

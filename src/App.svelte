@@ -279,6 +279,7 @@
     {activeConversationId}
     onSelect={onSelectConversation}
     {onNewChat}
+    onImportConversation={onConversationCreated}
     {openSettings}
     {openComparison}
     {openComputerUse}
