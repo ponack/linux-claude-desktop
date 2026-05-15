@@ -2,6 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
+  import { emit as emitPluginEvent } from "./plugins.js";
 
   let { activeConversationId, onSelect, onNewChat, openSettings, openComparison, openComputerUse, openExtensions, openTerminal, openGit, onBackToChat, currentView = "chat", refreshKey, collapsed = false } = $props();
 
@@ -137,6 +138,7 @@
     e.stopPropagation();
     try {
       await invoke("delete_conversation", { id });
+      emitPluginEvent("conversation:delete", { id }).catch(() => {});
       if (activeConversationId === id) {
         onNewChat();
       }

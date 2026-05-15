@@ -1,16 +1,22 @@
-// Hello World — demonstrates the PR 2 plugin API.
+// Hello World — demonstrates the PR 1-3 plugin API.
 //
 // After installing (copy this folder into ~/.local/share/linux-claude-desktop/plugins/
-// and reload), try these commands in chat:
+// and reload), try:
 //
 //   /greet     — inserts a greeting and auto-sends it
 //   /count     — increments a counter persisted via lcd.storage
 //   /reset     — clears the counter and shows a toast
+//   /stats     — shows how many Claude responses you've received in this session
+//
+// And try ending a message with "!!" — the message:before-send hook will rewrite
+// it to be slightly more polite before the API call.
 //
 // You can also watch the plugin's console panel in Settings → Plugins.
 
 export function activate(lcd) {
   lcd.log("hello-world activated; host version:", lcd.version);
+
+  // ── Slash commands (PR 2) ──────────────────────────────────────────────────
 
   lcd.registerCommand({
     name: "greet",
@@ -27,7 +33,6 @@ export function activate(lcd) {
       await lcd.storage.set("counter", next);
       lcd.notify(`Counter is now ${next}`, "info");
       lcd.log("count →", next);
-      return undefined; // side-effect only
     },
   });
 
@@ -40,9 +45,36 @@ export function activate(lcd) {
     },
   });
 
-  // PR 3 will start emitting these events into the bus; subscribing now is safe.
-  lcd.on("response:complete", (payload) => {
-    lcd.log("Claude replied:", payload?.text?.slice?.(0, 60) ?? "(no text)");
+  lcd.registerCommand({
+    name: "stats",
+    description: "Show how many Claude responses arrived this session",
+    handler: async () => {
+      const n = (await lcd.storage.get("session_responses")) ?? 0;
+      lcd.notify(`Claude has replied ${n} time${n === 1 ? "" : "s"} this session`, "info");
+    },
+  });
+
+  // ── Event hooks (PR 3) ─────────────────────────────────────────────────────
+
+  // Mutable hook: rewrite enthusiastic messages.
+  lcd.on("message:before-send", (payload) => {
+    if (payload.text.endsWith("!!")) {
+      const rewritten = payload.text.replace(/!!$/, ".");
+      lcd.log("rewrote outgoing message:", payload.text, "→", rewritten);
+      return { text: rewritten };
+    }
+  });
+
+  // Observable hook: count Claude's replies this session.
+  lcd.on("response:complete", async (payload) => {
+    const prev = (await lcd.storage.get("session_responses")) ?? 0;
+    await lcd.storage.set("session_responses", prev + 1);
+    lcd.log("response complete", "len:", payload.text.length, "total:", prev + 1);
+  });
+
+  // Observable hook: log artifact creation.
+  lcd.on("artifact:create", (payload) => {
+    lcd.log("artifact created:", payload.title, `(${payload.language || payload.artifactType})`);
   });
 }
 
