@@ -6,16 +6,32 @@ Plugins extend LCD with custom slash commands, persistent storage, notifications
 
 ## Installing a plugin
 
+There are two ways:
+
+### From a URL (recommended)
+
+In **Settings → Plugins → Install from URL**, paste a direct link to a plugin `.zip` and click **Install**. The zip must contain a `manifest.json` at the root or inside a single top-level folder (GitHub release archives are fine — LCD strips the top-level folder automatically). Max 20 MB.
+
+After install, the plugin is unpacked into the plugins directory under its manifest `id`, and the runtime reloads so it activates immediately. Reinstalling the same `id` replaces the previous version (kept plugin data is **not** wiped).
+
+### Manually
+
 1. Open **Settings → Plugins → Open Plugins Folder** (or `~/.local/share/linux-claude-desktop/plugins/`).
 2. Copy a plugin folder into it. Each plugin lives in its own subdirectory:
+
    ```
    ~/.local/share/linux-claude-desktop/plugins/
      my-plugin/
        manifest.json
        index.js
    ```
+
 3. Click **Reload Plugins** in Settings, or restart LCD.
 4. Toggle the plugin **on** in Settings → Plugins.
+
+## Uninstalling a plugin
+
+Click the **Uninstall** button next to the plugin in Settings → Plugins. The plugin folder is deleted and its enable/disable state is cleared. Stored plugin data (anything written via `lcd.storage`) is **kept** so reinstalling later recovers it; to wipe data too, delete the rows manually via DB tools or just reinstall under a different `id`.
 
 ## Manifest schema (`manifest.json`)
 

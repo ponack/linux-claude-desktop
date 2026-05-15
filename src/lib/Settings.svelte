@@ -68,6 +68,10 @@
   let pluginRuntimeState = $state({});
   let pluginsDir = $state("");
   let pluginReloading = $state(false);
+  let pluginInstallUrl = $state("");
+  let pluginInstalling = $state(false);
+  let pluginInstallMsg = $state("");        // last toast/status line
+  let pluginInstallError = $state("");      // truthy = error variant
 
   // Status
   let saveStatus = $state(""); // "", "saving", "saved", "error"
@@ -638,6 +642,39 @@
 
   async function openPluginsFolder() {
     try { await invoke("open_plugins_folder"); } catch (e) { console.error(e); }
+  }
+
+  async function installPluginFromUrl() {
+    const url = pluginInstallUrl.trim();
+    if (!url) return;
+    pluginInstalling = true;
+    pluginInstallMsg = "";
+    pluginInstallError = "";
+    try {
+      const result = await invoke("install_plugin_from_url", { url });
+      pluginInstallMsg = `Installed ${result.name} v${result.version}`;
+      pluginInstallUrl = "";
+      await reloadAllPlugins();
+    } catch (e) {
+      pluginInstallError = String(e);
+      pluginInstallMsg = "";
+    } finally {
+      pluginInstalling = false;
+    }
+  }
+
+  async function uninstallPlugin(id, name) {
+    if (!confirm(`Uninstall "${name}"? The plugin folder will be deleted. (Stored plugin data is kept.)`)) {
+      return;
+    }
+    try {
+      await invoke("uninstall_plugin", { id });
+      pluginInstallMsg = `Uninstalled ${name}`;
+      pluginInstallError = "";
+      await reloadAllPlugins();
+    } catch (e) {
+      pluginInstallError = `Uninstall failed: ${e}`;
+    }
   }
 
   function formatInterval(ms) {
@@ -1594,6 +1631,42 @@
           </div>
         </div>
 
+        <div class="card" style="margin-bottom: 16px;">
+          <div class="setting-row" style="gap: 8px; flex-direction: column; align-items: stretch;">
+            <label for="plugin-install-url" style="font-size: 13px; font-weight: 500;">Install from URL</label>
+            <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
+              Paste a direct link to a plugin .zip (e.g. a GitHub release asset). The zip must contain a <code>manifest.json</code> at the root or inside a single top-level folder. Max 20 MB.
+            </p>
+            <div style="display: flex; gap: 8px;">
+              <input
+                id="plugin-install-url"
+                type="url"
+                class="text-input"
+                placeholder="https://github.com/user/plugin/releases/download/v1.0/plugin.zip"
+                bind:value={pluginInstallUrl}
+                disabled={pluginInstalling}
+                style="flex: 1;"
+              />
+              <button
+                class="btn-primary"
+                onclick={installPluginFromUrl}
+                disabled={pluginInstalling || !pluginInstallUrl.trim()}
+              >
+                {pluginInstalling ? "Installing…" : "Install"}
+              </button>
+            </div>
+            {#if pluginInstallError}
+              <div style="font-size: 12px; padding: 8px; background: rgba(233, 69, 96, 0.1); color: var(--danger); border-radius: 6px; white-space: pre-wrap; word-break: break-word;">
+                {pluginInstallError}
+              </div>
+            {:else if pluginInstallMsg}
+              <div style="font-size: 12px; padding: 8px; background: rgba(78, 204, 163, 0.1); color: var(--success); border-radius: 6px;">
+                {pluginInstallMsg}
+              </div>
+            {/if}
+          </div>
+        </div>
+
         {#if pluginScan.errors.length > 0}
           <div class="card" style="margin-bottom: 16px; border-left: 3px solid var(--danger);">
             <h4 style="font-size: 13px; margin: 0 0 8px 0; color: var(--danger);">Manifest errors</h4>
@@ -1651,10 +1724,20 @@
                     </details>
                   {/if}
                 </div>
-                <label class="toggle-switch" style="margin-left: 12px;">
-                  <input type="checkbox" checked={p.enabled} onchange={(e) => togglePlugin(p.manifest.id, e.target.checked)} />
-                  <span class="toggle-slider"></span>
-                </label>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-left: 12px;">
+                  <label class="toggle-switch">
+                    <input type="checkbox" checked={p.enabled} onchange={(e) => togglePlugin(p.manifest.id, e.target.checked)} />
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <button
+                    class="btn-sm"
+                    style="font-size: 11px; padding: 3px 8px; color: var(--danger); border: 1px solid var(--border); border-radius: 4px; background: transparent;"
+                    onclick={() => uninstallPlugin(p.manifest.id, p.manifest.name)}
+                    title="Delete this plugin folder"
+                  >
+                    Uninstall
+                  </button>
+                </div>
               </div>
             </div>
           {/each}
