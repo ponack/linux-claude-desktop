@@ -320,6 +320,8 @@ pub fn run() {
             plugins::read_plugin_source,
             plugins::set_plugin_enabled,
             plugins::open_plugins_folder,
+            plugins::install_plugin_from_url,
+            plugins::uninstall_plugin,
             db::plugin_storage_get,
             db::plugin_storage_set,
             db::plugin_storage_delete,

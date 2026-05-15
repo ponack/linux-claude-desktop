@@ -30,6 +30,7 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-deep-link = "2"
 zbus = "5"
 portable-pty = "0.8"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

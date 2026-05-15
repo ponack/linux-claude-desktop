@@ -1371,6 +1371,11 @@ impl Database {
         Ok(())
     }
 
+    pub fn delete_plugin_state(&self, id: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute("DELETE FROM plugin_state WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
     // --- Plugin storage (per-plugin namespaced KV) ---
 
     pub fn plugin_storage_get(&self, plugin_id: &str, key: &str) -> Result<Option<String>, rusqlite::Error> {
