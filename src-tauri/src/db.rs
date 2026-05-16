@@ -19,6 +19,14 @@ pub struct Message {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MessageAnnotation {
+    pub id: String,
+    pub message_id: String,
+    pub content: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CustomEndpoint {
     pub id: String,
     pub name: String,
@@ -431,6 +439,15 @@ impl Database {
             CREATE TABLE IF NOT EXISTS api_server_config (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
+            );"
+        ).ok();
+
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS message_annotations (
+                id TEXT PRIMARY KEY,
+                message_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL
             );"
         ).ok();
 
@@ -1588,6 +1605,35 @@ impl Database {
             "INSERT OR REPLACE INTO api_server_config (key, value) VALUES (?1, ?2)",
             params![key, value],
         )?;
+        Ok(())
+    }
+
+    pub fn add_message_annotation(&self, id: &str, message_id: &str, content: &str) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO message_annotations (id, message_id, content, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![id, message_id, content, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_message_annotations(&self, message_id: &str) -> Result<Vec<MessageAnnotation>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, message_id, content, created_at FROM message_annotations WHERE message_id = ?1 ORDER BY created_at ASC"
+        )?;
+        let rows = stmt.query_map(params![message_id], |row| {
+            Ok(MessageAnnotation {
+                id: row.get(0)?,
+                message_id: row.get(1)?,
+                content: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn delete_message_annotation(&self, id: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute("DELETE FROM message_annotations WHERE id = ?1", params![id])?;
         Ok(())
     }
 }
@@ -2879,4 +2925,24 @@ pub fn plugin_storage_list_keys(state: tauri::State<AppState>, plugin_id: String
 #[tauri::command]
 pub fn plugin_storage_clear(state: tauri::State<AppState>, plugin_id: String) -> Result<(), String> {
     state.db.lock().unwrap().plugin_storage_clear(&plugin_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn add_message_annotation(state: tauri::State<AppState>, message_id: String, content: String) -> Result<MessageAnnotation, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let db = state.db.lock().unwrap();
+    db.add_message_annotation(&id, &message_id, &content).map_err(|e| e.to_string())?;
+    let annotations = db.get_message_annotations(&message_id).map_err(|e| e.to_string())?;
+    annotations.into_iter().find(|a| a.id == id)
+        .ok_or_else(|| "Annotation not found after insert".to_string())
+}
+
+#[tauri::command]
+pub fn get_message_annotations(state: tauri::State<AppState>, message_id: String) -> Result<Vec<MessageAnnotation>, String> {
+    state.db.lock().unwrap().get_message_annotations(&message_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_message_annotation(state: tauri::State<AppState>, id: String) -> Result<(), String> {
+    state.db.lock().unwrap().delete_message_annotation(&id).map_err(|e| e.to_string())
 }

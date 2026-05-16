@@ -11,6 +11,52 @@
   let isEditing = $state(false);
   let editText = $state("");
 
+  // Annotations
+  let annotations = $state([]);
+  let showAnnotationInput = $state(false);
+  let annotationText = $state("");
+  let annotationInputEl;
+
+  async function loadAnnotations() {
+    if (!messageId) return;
+    try {
+      annotations = await invoke("get_message_annotations", { messageId });
+    } catch { annotations = []; }
+  }
+
+  async function saveAnnotation() {
+    const text = annotationText.trim();
+    if (!text || !messageId) { showAnnotationInput = false; annotationText = ""; return; }
+    try {
+      const ann = await invoke("add_message_annotation", { messageId, content: text });
+      annotations = [...annotations, ann];
+    } catch (e) { console.error("Failed to save annotation:", e); }
+    annotationText = "";
+    showAnnotationInput = false;
+  }
+
+  async function removeAnnotation(id) {
+    try {
+      await invoke("delete_message_annotation", { id });
+      annotations = annotations.filter(a => a.id !== id);
+    } catch (e) { console.error("Failed to delete annotation:", e); }
+  }
+
+  async function openAnnotationInput() {
+    showAnnotationInput = true;
+    await tick();
+    annotationInputEl?.focus();
+  }
+
+  function onAnnotationKeydown(e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveAnnotation(); }
+    if (e.key === "Escape") { showAnnotationInput = false; annotationText = ""; }
+  }
+
+  $effect(() => {
+    if (messageId) loadAnnotations();
+  });
+
   // Configure marked to use highlight.js
   marked.setOptions({
     highlight(code, lang) {
@@ -304,6 +350,44 @@
               <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
             </svg>
           </button>
+        {/if}
+        {#if messageId}
+          <button class="action-btn" onclick={openAnnotationInput} title="Add note" aria-label="Add annotation">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="18" x2="12" y2="12"/>
+              <line x1="9" y1="15" x2="15" y2="15"/>
+            </svg>
+          </button>
+        {/if}
+      </div>
+    {/if}
+
+    {#if annotations.length > 0 || showAnnotationInput}
+      <div class="annotations">
+        {#each annotations as ann (ann.id)}
+          <div class="annotation">
+            <span class="annotation-text">{ann.content}</span>
+            <button class="annotation-delete" onclick={() => removeAnnotation(ann.id)} aria-label="Delete note" title="Delete note">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        {/each}
+        {#if showAnnotationInput}
+          <div class="annotation-input-wrap">
+            <input
+              bind:this={annotationInputEl}
+              bind:value={annotationText}
+              onkeydown={onAnnotationKeydown}
+              onblur={saveAnnotation}
+              placeholder="Add a note… (Enter to save)"
+              class="annotation-input"
+              type="text"
+            />
+          </div>
         {/if}
       </div>
     {/if}
@@ -635,5 +719,67 @@
     color: var(--text-muted);
     font-size: 11px;
     font-family: "JetBrains Mono", "Fira Code", monospace;
+  }
+
+  .annotations {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .annotation {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 203, 107, 0.08);
+    border-left: 2px solid var(--warning, #e8a838);
+    border-radius: 0 4px 4px 0;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .annotation-text {
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .annotation-delete {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    opacity: 0;
+    padding: 2px;
+    border-radius: 3px;
+    transition: opacity 0.15s, color 0.15s;
+  }
+
+  .annotation:hover .annotation-delete {
+    opacity: 1;
+  }
+
+  .annotation-delete:hover {
+    color: var(--danger);
+  }
+
+  .annotation-input-wrap {
+    padding: 2px 0;
+  }
+
+  .annotation-input {
+    width: 100%;
+    background: rgba(255, 203, 107, 0.06);
+    border: 1px solid var(--warning, #e8a838);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--text-primary);
+    font-family: inherit;
+    outline: none;
+  }
+
+  .annotation-input::placeholder {
+    color: var(--text-muted);
   }
 </style>
