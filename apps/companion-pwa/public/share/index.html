@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shared Conversation — Linux Claude Desktop</title>
+  <style>
+    :root {
+      --bg: #0f0f17;
+      --surface: #1a1a2e;
+      --border: #2a2a40;
+      --text: #e0e0f0;
+      --muted: #6b6b8a;
+      --accent: #7c5cbf;
+      --user-bubble: #7c5cbf;
+      --assistant-bubble: #1a1a2e;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f5f5f8;
+        --surface: #ffffff;
+        --border: #e0e0ea;
+        --text: #1a1a2e;
+        --muted: #8888a0;
+        --accent: #6a4db0;
+        --user-bubble: #6a4db0;
+        --assistant-bubble: #ffffff;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100dvh;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 10;
+    }
+    header svg { flex-shrink: 0; color: var(--accent); }
+    .header-text { flex: 1; min-width: 0; }
+    h1 {
+      font-size: 16px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+    .message { display: flex; margin-bottom: 16px; }
+    .message.user { justify-content: flex-end; }
+    .bubble {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 15px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .message.user .bubble {
+      background: var(--user-bubble);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .message.assistant .bubble {
+      background: var(--assistant-bubble);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+    .role-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      padding: 0 4px;
+    }
+    .msg-wrap { display: flex; flex-direction: column; max-width: 80%; }
+    .message.user .msg-wrap { align-items: flex-end; }
+    .error, .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 60px 20px;
+      font-size: 15px;
+    }
+    .error { color: #e94560; }
+    footer {
+      text-align: center;
+      padding: 16px;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+    </svg>
+    <div class="header-text">
+      <h1 id="conv-title">Loading…</h1>
+      <div class="meta" id="conv-meta"></div>
+    </div>
+  </header>
+
+  <main id="messages"></main>
+
+  <footer>
+    Shared via <a href="https://github.com/ponack/linux-claude-desktop" target="_blank" rel="noopener">Linux Claude Desktop</a>
+    &nbsp;·&nbsp; Read-only snapshot
+  </footer>
+
+  <script>
+    function base64UrlDecode(str) {
+      // Restore standard base64 padding
+      str = str.replace(/-/g, '+').replace(/_/g, '/');
+      while (str.length % 4) str += '=';
+      return atob(str);
+    }
+
+    function render(data) {
+      document.title = `${data.title} — Linux Claude Desktop`;
+      document.getElementById('conv-title').textContent = data.title;
+
+      const date = new Date(data.created_at);
+      document.getElementById('conv-meta').textContent =
+        `${data.messages.length} messages · ${date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`;
+
+      const main = document.getElementById('messages');
+
+      if (!data.messages.length) {
+        main.innerHTML = '<div class="empty">No messages in this conversation.</div>';
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      for (const msg of data.messages) {
+        const div = document.createElement('div');
+        div.className = `message ${msg.role}`;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'msg-wrap';
+
+        const label = document.createElement('div');
+        label.className = 'role-label';
+        label.textContent = msg.role === 'user' ? 'You' : 'Claude';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.textContent = msg.content;
+
+        wrap.appendChild(label);
+        wrap.appendChild(bubble);
+        div.appendChild(wrap);
+        fragment.appendChild(div);
+      }
+      main.appendChild(fragment);
+    }
+
+    try {
+      const hash = window.location.hash.slice(1);
+      if (!hash) throw new Error('No conversation data in URL.');
+      const json = base64UrlDecode(hash);
+      const data = JSON.parse(json);
+      render(data);
+    } catch (e) {
+      document.getElementById('conv-title').textContent = 'Invalid share link';
+      document.getElementById('messages').innerHTML =
+        `<div class="error">Could not load conversation: ${e.message}</div>`;
+    }
+  </script>
+</body>
+</html>

@@ -2094,6 +2094,20 @@ pub fn export_conversation_to_file(
 }
 
 #[tauri::command]
+pub fn share_conversation(
+    state: tauri::State<AppState>,
+    conversation_id: String,
+) -> Result<String, String> {
+    let db = state.db.lock().unwrap();
+    let json = do_export_conversation(&db, &conversation_id, "json")?;
+    use base64::Engine as _;
+    let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(json.as_bytes());
+    Ok(format!(
+        "https://ponack.github.io/linux-claude-desktop/share/#{encoded}"
+    ))
+}
+
+#[tauri::command]
 pub fn import_conversation_from_file(
     state: tauri::State<AppState>,
     path: String,
