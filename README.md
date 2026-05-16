@@ -393,6 +393,20 @@ linux-claude-desktop/
 - [x] Custom artifact renderers via `lcd.registerArtifactType` (match by typeName, language, or title extension)
 - [ ] Plugin marketplace / registry (future)
 
+### Phase 15 — Sync ✅
+
+- [x] Git-based conversation sync — commit/push/pull via local bare repo or remote (SSH/HTTPS)
+- [x] WebDAV sync — push/pull to any WebDAV server (Nextcloud, Caddy, etc.)
+- [x] S3-compatible sync — push/pull to AWS S3, MinIO, Backblaze B2, etc.
+- [x] Sync status indicator + conflict detection — Settings → Sync shows last-synced time, conflict count, and per-conflict Keep Local / Use Remote resolution UI
+
+### Phase 16 — Mobile Companion PWA ✅
+
+- [x] Local API server — axum HTTP server with bearer-token auth; exposes `GET/POST /api/conversations` and `POST /api/conversations/:id/messages` over LAN
+- [x] Companion PWA — Svelte 5 mobile web app at [ponack.github.io/linux-claude-desktop](https://ponack.github.io/linux-claude-desktop/); lists conversations, sends and receives messages, dark/light theme
+- [x] Offline support — service worker (stale-while-revalidate + network-first), localStorage message queue, Background Sync, offline banner; messages queued while offline flush on reconnect
+- [x] QR code pairing — Settings → API Server → Mobile Pairing generates a QR encoding `{url, token}`; scanning auto-configures the PWA with no manual entry; token rotates per generation
+
 ## Tech Stack
 
 | Layer | Technology |
