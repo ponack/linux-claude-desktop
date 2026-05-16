@@ -407,6 +407,12 @@ linux-claude-desktop/
 - [x] Offline support — service worker (stale-while-revalidate + network-first), localStorage message queue, Background Sync, offline banner; messages queued while offline flush on reconnect
 - [x] QR code pairing — Settings → API Server → Mobile Pairing generates a QR encoding `{url, token}`; scanning auto-configures the PWA with no manual entry; token rotates per generation
 
+### Phase 17 — Collab Features ✅
+
+- [x] Share link — Share button in chat toolbar encodes the full conversation as a base64 URL; opens as a read-only formatted view at `ponack.github.io/linux-claude-desktop/share/` — no login, no server required
+- [x] Message annotations — hover any message to reveal a note icon; inline input saves notes below the bubble with a yellow left-border strip; persisted in SQLite, deletable per-note
+- [x] Live session — broadcast icon starts a real-time SSE feed via the local API server; open the generated URL on any LAN device to watch the conversation update live in the `/live/` PWA page
+
 ## Tech Stack
 
 | Layer | Technology |
