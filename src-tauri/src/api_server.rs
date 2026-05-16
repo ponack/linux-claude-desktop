@@ -76,6 +76,55 @@ pub fn rotate_api_server_token(state: tauri::State<crate::AppState>) -> Result<S
     Ok(new_token)
 }
 
+#[derive(Serialize)]
+pub struct PairingQrResult {
+    pub svg: String,
+    pub token: String,
+    pub url: String,
+}
+
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 3);
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9'
+            | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+#[tauri::command]
+pub fn generate_pairing_qr(
+    state: tauri::State<crate::AppState>,
+    local_ip: String,
+) -> Result<PairingQrResult, String> {
+    let new_token = uuid::Uuid::new_v4().to_string();
+    let db = state.db.lock().unwrap();
+    db.set_api_server_value("token", &new_token).map_err(|e| e.to_string())?;
+    let port = db
+        .get_api_server_value("port")
+        .and_then(|v| v.parse::<u16>().ok())
+        .unwrap_or(7432);
+    drop(db);
+
+    let api_url = format!("http://{}:{}", local_ip.trim(), port);
+    let pairing_url = format!(
+        "https://ponack.github.io/linux-claude-desktop/?lcd_url={}&lcd_token={}",
+        percent_encode(&api_url),
+        percent_encode(&new_token),
+    );
+
+    let code = qrcode::QrCode::new(pairing_url.as_bytes()).map_err(|e| e.to_string())?;
+    let svg = code
+        .render::<qrcode::render::svg::Color>()
+        .min_dimensions(220, 220)
+        .build();
+
+    Ok(PairingQrResult { svg, token: new_token, url: pairing_url })
+}
+
 // ── HTTP server ───────────────────────────────────────────────────────────────
 
 #[derive(Clone)]

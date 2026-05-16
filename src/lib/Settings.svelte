@@ -69,6 +69,9 @@
   let apiServerConfig = $state({ enabled: false, port: 7432, lan_access: false, token: "" });
   let apiServerSaved = $state(false);
   let apiServerTokenCopied = $state(false);
+  let pairingQr = $state(null);
+  let pairingQrLoading = $state(false);
+  let localIp = $state("");
 
   // Sync (Phase 15)
   let syncConfig = $state({ enabled: false, backend_type: "git", auto_sync_interval_mins: 0, repo_path: "", commit_name: "LCD Sync", commit_email: "sync@linux-claude-desktop.local", webdav_url: "", webdav_username: "", webdav_password: "", s3_endpoint: "", s3_bucket: "", s3_region: "us-east-1", s3_access_key: "", s3_secret_key: "" });
@@ -677,6 +680,21 @@
       apiServerTokenCopied = true;
       setTimeout(() => { apiServerTokenCopied = false; }, 2000);
     } catch (e) {}
+  }
+
+  async function generatePairingQr() {
+    if (!localIp.trim()) return;
+    pairingQrLoading = true;
+    pairingQr = null;
+    try {
+      const result = await invoke("generate_pairing_qr", { localIp: localIp.trim() });
+      pairingQr = result;
+      apiServerConfig = { ...apiServerConfig, token: result.token };
+    } catch (e) {
+      console.error("Failed to generate pairing QR:", e);
+    } finally {
+      pairingQrLoading = false;
+    }
   }
 
   async function saveSyncConfig() {
@@ -2026,6 +2044,37 @@
             <div><code>POST http://localhost:{apiServerConfig.port}/api/conversations</code></div>
             <div><code>POST http://localhost:{apiServerConfig.port}/api/conversations/:id/messages</code></div>
           </div>
+        </div>
+
+        <div class="card">
+          <h4 style="margin: 0 0 8px; font-size: 13px;">Mobile Pairing</h4>
+          <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 12px;">
+            Enter your computer's LAN IP, then generate a QR code. Scan it with your phone to open the
+            companion PWA pre-configured. The token rotates each time a QR is generated.
+          </p>
+          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
+            <input
+              type="text"
+              class="text-input"
+              placeholder="e.g. 192.168.1.42"
+              bind:value={localIp}
+              style="flex: 1; font-family: monospace; font-size: 12px;"
+            />
+            <button class="btn-secondary" onclick={generatePairingQr} disabled={!localIp.trim() || pairingQrLoading}>
+              {pairingQrLoading ? "Generating…" : "Generate QR"}
+            </button>
+          </div>
+          {#if pairingQr}
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+              <div style="background: #fff; padding: 12px; border-radius: 8px; line-height: 0;">
+                {@html pairingQr.svg}
+              </div>
+              <p style="font-size: 11px; color: var(--text-muted); text-align: center; margin: 0;">
+                Scan with your phone's camera to open the companion app.<br/>
+                QR is valid until the next rotation.
+              </p>
+            </div>
+          {/if}
         </div>
       </div>
 
