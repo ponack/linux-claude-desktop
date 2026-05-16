@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Session — Linux Claude Desktop</title>
+  <style>
+    :root {
+      --bg: #0f0f17;
+      --surface: #1a1a2e;
+      --border: #2a2a40;
+      --text: #e0e0f0;
+      --muted: #6b6b8a;
+      --accent: #7c5cbf;
+      --live: #e94560;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f5f5f8;
+        --surface: #ffffff;
+        --border: #e0e0ea;
+        --text: #1a1a2e;
+        --muted: #8888a0;
+        --accent: #6a4db0;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 10;
+    }
+    .live-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--live);
+      animation: pulse 1.5s infinite;
+      flex-shrink: 0;
+    }
+    .live-dot.disconnected { background: var(--muted); animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .live-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--live);
+    }
+    .live-badge.disconnected { color: var(--muted); }
+    h1 { font-size: 15px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    main {
+      flex: 1;
+      max-width: 760px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 20px 16px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .message { display: flex; }
+    .message.user { justify-content: flex-end; }
+    .msg-wrap { display: flex; flex-direction: column; max-width: 80%; }
+    .message.user .msg-wrap { align-items: flex-end; }
+    .role-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; padding: 0 4px; }
+    .bubble {
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 15px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .message.user .bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+    .message.assistant .bubble { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .state-msg { text-align: center; color: var(--muted); padding: 48px 20px; font-size: 14px; }
+    .error-msg { text-align: center; color: var(--live); padding: 48px 20px; font-size: 14px; }
+    footer { text-align: center; padding: 14px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); }
+    footer a { color: var(--accent); text-decoration: none; }
+    .scroll-anchor { height: 1px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="live-dot" id="live-dot"></div>
+    <span class="live-badge" id="live-badge">Connecting…</span>
+    <h1 id="conv-title">Live Session</h1>
+  </header>
+  <main id="messages">
+    <div class="state-msg" id="state-msg">Connecting to live session…</div>
+  </main>
+  <div class="scroll-anchor" id="scroll-anchor"></div>
+  <footer>
+    Live via <a href="https://github.com/ponack/linux-claude-desktop" target="_blank" rel="noopener">Linux Claude Desktop</a>
+  </footer>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const lcdUrl   = params.get('lcd_url');
+    const lcdToken = params.get('lcd_token');
+    const convId   = params.get('conv_id');
+
+    const dot   = document.getElementById('live-dot');
+    const badge = document.getElementById('live-badge');
+    const main  = document.getElementById('messages');
+    const stateMsg = document.getElementById('state-msg');
+    const anchor   = document.getElementById('scroll-anchor');
+
+    function setStatus(connected) {
+      if (connected) {
+        dot.className = 'live-dot';
+        badge.className = 'live-badge';
+        badge.textContent = 'Live';
+      } else {
+        dot.className = 'live-dot disconnected';
+        badge.className = 'live-badge disconnected';
+        badge.textContent = 'Disconnected';
+      }
+    }
+
+    function makeMessageEl(msg) {
+      const div = document.createElement('div');
+      div.className = `message ${msg.role}`;
+      div.dataset.id = msg.id;
+
+      const wrap = document.createElement('div');
+      wrap.className = 'msg-wrap';
+
+      const label = document.createElement('div');
+      label.className = 'role-label';
+      label.textContent = msg.role === 'user' ? 'You' : 'Claude';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.textContent = msg.content;
+
+      wrap.appendChild(label);
+      wrap.appendChild(bubble);
+      div.appendChild(wrap);
+      return div;
+    }
+
+    function scrollToBottom() {
+      anchor.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    if (!lcdUrl || !lcdToken || !convId) {
+      stateMsg.className = 'error-msg';
+      stateMsg.textContent = 'Invalid live session link — missing lcd_url, lcd_token, or conv_id parameters.';
+    } else {
+      const streamUrl = `${lcdUrl}/api/conversations/${encodeURIComponent(convId)}/stream?token=${encodeURIComponent(lcdToken)}`;
+      const es = new EventSource(streamUrl);
+
+      es.addEventListener('init', (e) => {
+        stateMsg.remove();
+        setStatus(true);
+        const msgs = JSON.parse(e.data);
+        for (const msg of msgs) {
+          main.appendChild(makeMessageEl(msg));
+        }
+        scrollToBottom();
+      });
+
+      es.addEventListener('message', (e) => {
+        const msg = JSON.parse(e.data);
+        const existing = document.querySelector(`[data-id="${msg.id}"]`);
+        if (!existing) {
+          main.appendChild(makeMessageEl(msg));
+          scrollToBottom();
+        }
+      });
+
+      es.onerror = () => {
+        setStatus(false);
+        if (!document.querySelector('.message')) {
+          stateMsg.className = 'error-msg';
+          stateMsg.textContent = 'Could not connect. Make sure the API server is running and LAN access is enabled.';
+        }
+      };
+
+      es.onopen = () => setStatus(true);
+    }
+  </script>
+</body>
+</html>

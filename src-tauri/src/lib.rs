@@ -22,13 +22,24 @@ use tauri::{
     tray::TrayIconBuilder,
 };
 
+#[derive(Clone, serde::Serialize)]
+pub struct LiveMessage {
+    pub conversation_id: String,
+    pub id: String,
+    pub role: String,
+    pub content: String,
+    pub created_at: String,
+}
+
 pub struct AppState {
     pub db: Mutex<Database>,
+    pub live_tx: tokio::sync::broadcast::Sender<LiveMessage>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let db = Database::new().expect("Failed to initialize database");
+    let (live_tx, _) = tokio::sync::broadcast::channel::<LiveMessage>(256);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -38,6 +49,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .manage(AppState {
             db: Mutex::new(db),
+            live_tx,
         })
         .manage(TerminalState::new())
         .setup(|app| {
@@ -393,6 +405,7 @@ pub fn run() {
             api_server::set_api_server_config,
             api_server::rotate_api_server_token,
             api_server::generate_pairing_qr,
+            api_server::broadcast_live_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
