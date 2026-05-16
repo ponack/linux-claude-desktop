@@ -8,6 +8,7 @@
   import MessageBubble from "./MessageBubble.svelte";
   import ArtifactPanel from "./ArtifactPanel.svelte";
   import { getPluginCommands, onPluginCommandsChanged, runPluginCommand, emit as emitPluginEvent } from "./plugins.js";
+  import { showToast } from "./toast.js";
 
   let { conversationId, onConversationCreated, deepLinkText = $bindable("") } = $props();
 
@@ -787,6 +788,20 @@ Be thorough in each step. Do not skip steps or combine them.`;
     }
   }
 
+  let shareTooltip = $state("Share link");
+  async function shareConversation() {
+    if (!conversationId) return;
+    try {
+      const url = await invoke("share_conversation", { conversationId });
+      await navigator.clipboard.writeText(url);
+      shareTooltip = "Copied!";
+      setTimeout(() => { shareTooltip = "Share link"; }, 2500);
+      showToast("Share link copied to clipboard", "success");
+    } catch (e) {
+      showToast("Failed to generate share link", "error");
+    }
+  }
+
   async function loadArtifacts() {
     if (!conversationId) { artifacts = []; return; }
     try {
@@ -918,6 +933,12 @@ Be thorough in each step. Do not skip steps or combine them.`;
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             .json
+          </button>
+          <button class="toolbar-btn" onclick={shareConversation} title={shareTooltip} aria-label="Share conversation">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
           </button>
         </div>
       </div>

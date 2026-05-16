@@ -251,6 +251,7 @@ pub fn run() {
             db::set_mcp_servers,
             db::export_conversation,
             db::export_conversation_to_file,
+            db::share_conversation,
             db::import_conversation_from_file,
             db::export_all_conversations_to_zip,
             db::get_projects,
