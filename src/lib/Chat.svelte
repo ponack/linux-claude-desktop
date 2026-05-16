@@ -437,6 +437,20 @@
         isStreaming = false;
         streamingMessageId = null;
 
+        // Broadcast to live session viewers
+        if (liveActive) {
+          const completedMsg = messages.find(m => m.id === message_id);
+          if (completedMsg) {
+            invoke("broadcast_live_message", {
+              conversationId,
+              id: completedMsg.id,
+              role: completedMsg.role,
+              content: completedMsg.content,
+              createdAt: completedMsg.created_at || new Date().toISOString(),
+            }).catch(() => {});
+          }
+        }
+
         // Plugin hook: response:complete (observable)
         const fullMsg = messages.find(m => m.id === message_id);
         emitPluginEvent("response:complete", {
@@ -788,6 +802,33 @@ Be thorough in each step. Do not skip steps or combine them.`;
     }
   }
 
+  // Live session
+  let liveActive = $state(false);
+  let liveUrl = $state("");
+  let liveCopied = $state(false);
+
+  async function toggleLiveSession() {
+    if (!conversationId) return;
+    liveActive = !liveActive;
+    if (liveActive) {
+      try {
+        const cfg = await invoke("get_api_server_config");
+        const token = cfg.token;
+        const port = cfg.port;
+        liveUrl = `https://ponack.github.io/linux-claude-desktop/live/?lcd_url=${encodeURIComponent(`http://localhost:${port}`)}&lcd_token=${encodeURIComponent(token)}&conv_id=${encodeURIComponent(conversationId)}`;
+      } catch {
+        liveUrl = "";
+      }
+    }
+  }
+
+  async function copyLiveUrl() {
+    if (!liveUrl) return;
+    await navigator.clipboard.writeText(liveUrl);
+    liveCopied = true;
+    setTimeout(() => { liveCopied = false; }, 2000);
+  }
+
   let shareTooltip = $state("Share link");
   async function shareConversation() {
     if (!conversationId) return;
@@ -940,7 +981,23 @@ Be thorough in each step. Do not skip steps or combine them.`;
               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
             </svg>
           </button>
+          <button class="toolbar-btn" class:live-active={liveActive} onclick={toggleLiveSession} title={liveActive ? "Stop live session" : "Start live session"} aria-label="Toggle live session">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M6.34 6.34a8 8 0 000 11.32M17.66 17.66a8 8 0 000-11.32M3.52 3.52a12 12 0 000 16.97M20.49 20.49a12 12 0 000-16.97"/>
+            </svg>
+          </button>
         </div>
+        {#if liveActive && liveUrl}
+          <div class="live-panel">
+            <span class="live-dot"></span>
+            <span class="live-label">Live</span>
+            <input type="text" class="live-url-input" value={liveUrl} readonly />
+            <button class="live-copy-btn" onclick={copyLiveUrl}>
+              {liveCopied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        {/if}
       </div>
     {/if}
     {#if isOffline}
@@ -1257,6 +1314,71 @@ Be thorough in each step. Do not skip steps or combine them.`;
   .toolbar-btn:hover {
     color: var(--text-primary);
     background: var(--bg-tertiary);
+  }
+
+  .toolbar-btn.live-active {
+    color: #e94560;
+  }
+
+  .live-panel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(233, 69, 96, 0.07);
+    border-bottom: 1px solid rgba(233, 69, 96, 0.2);
+    font-size: 12px;
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #e94560;
+    animation: pulse-live 1.5s infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse-live {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .live-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #e94560;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+
+  .live-url-input {
+    flex: 1;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--text-muted);
+    outline: none;
+    min-width: 0;
+  }
+
+  .live-copy-btn {
+    padding: 3px 10px;
+    background: rgba(233, 69, 96, 0.15);
+    color: #e94560;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+
+  .live-copy-btn:hover {
+    background: rgba(233, 69, 96, 0.3);
   }
 
   .project-select {

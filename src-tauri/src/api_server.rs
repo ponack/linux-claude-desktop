@@ -1,10 +1,11 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
-    response::Json,
+    response::{Json, sse::{Event, KeepAlive, Sse}},
     routing::{get, post},
     Router,
 };
+use futures_util::stream;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::Manager;
@@ -393,6 +394,101 @@ async fn call_ai_sync(
     }
 }
 
+// ── Live session ─────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn broadcast_live_message(
+    state: tauri::State<crate::AppState>,
+    conversation_id: String,
+    id: String,
+    role: String,
+    content: String,
+    created_at: String,
+) -> Result<(), String> {
+    let msg = crate::LiveMessage { conversation_id, id, role, content, created_at };
+    let _ = state.live_tx.send(msg);
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct StreamQuery {
+    token: Option<String>,
+}
+
+fn check_auth_token(
+    headers: &axum::http::HeaderMap,
+    query_token: Option<&str>,
+    ctx: &Ctx,
+) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    let cfg = get_cfg(ctx);
+    if !cfg.enabled {
+        return Err(svc_err("API server is disabled"));
+    }
+    let bearer = headers.get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|t| t == cfg.token)
+        .unwrap_or(false);
+    let query_ok = query_token.map(|t| t == cfg.token).unwrap_or(false);
+    if bearer || query_ok { Ok(()) } else { Err(auth_err()) }
+}
+
+// GET /api/conversations/:id/stream?token=<bearer>
+async fn live_stream_handler(
+    State(ctx): Cx,
+    headers: axum::http::HeaderMap,
+    Path(id): Path<String>,
+    Query(q): Query<StreamQuery>,
+) -> Result<Sse<impl futures_util::Stream<Item = Result<Event, std::convert::Infallible>>>, (StatusCode, Json<serde_json::Value>)> {
+    check_auth_token(&headers, q.token.as_deref(), &ctx)?;
+
+    let s = ctx.app.state::<crate::AppState>();
+
+    // Seed with existing messages
+    let existing: Vec<serde_json::Value> = {
+        let db = s.db.lock().unwrap();
+        db.list_messages(&id)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| serde_json::json!({"id": m.id, "role": m.role, "content": m.content, "created_at": m.created_at}))
+            .collect()
+    };
+
+    let rx = s.live_tx.subscribe();
+    let conv_id = id.clone();
+
+    let sse_stream = stream::unfold(
+        (rx, existing, false),
+        move |(mut rx, seed, seed_done)| {
+            let conv_id = conv_id.clone();
+            async move {
+                if !seed_done {
+                    let data = serde_json::to_string(&seed).unwrap_or_default();
+                    let evt = Ok(Event::default().event("init").data(data));
+                    return Some((evt, (rx, Vec::new(), true)));
+                }
+                loop {
+                    match rx.recv().await {
+                        Ok(msg) if msg.conversation_id == conv_id => {
+                            let data = serde_json::to_string(&serde_json::json!({
+                                "id": msg.id, "role": msg.role,
+                                "content": msg.content, "created_at": msg.created_at,
+                            })).unwrap_or_default();
+                            let evt = Ok(Event::default().event("message").data(data));
+                            return Some((evt, (rx, Vec::new(), true)));
+                        }
+                        Ok(_) => continue,
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    }
+                }
+            }
+        },
+    );
+
+    Ok(Sse::new(sse_stream).keep_alive(KeepAlive::default()))
+}
+
 // ── Server entrypoint ─────────────────────────────────────────────────────────
 
 pub async fn start(app: tauri::AppHandle, port: u16, lan: bool) {
@@ -408,6 +504,7 @@ pub async fn start(app: tauri::AppHandle, port: u16, lan: bool) {
         .route("/api/conversations", get(list_conversations_handler).post(create_conversation_handler))
         .route("/api/conversations/:id", get(get_conversation_handler))
         .route("/api/conversations/:id/messages", post(send_message_handler))
+        .route("/api/conversations/:id/stream", get(live_stream_handler))
         .layer(CorsLayer::permissive())
         .with_state(ctx);
 
