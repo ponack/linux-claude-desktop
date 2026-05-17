@@ -413,18 +413,20 @@ linux-claude-desktop/
 - [x] Message annotations — hover any message to reveal a note icon; inline input saves notes below the bubble with a yellow left-border strip; persisted in SQLite, deletable per-note
 - [x] Live session — broadcast icon starts a real-time SSE feed via the local API server; open the generated URL on any LAN device to watch the conversation update live in the `/live/` PWA page
 
-### Redesign Foundations (v0.9.9, ongoing toward v1.0.0)
+### UI Redesign (v1.0.0)
 
-- [x] UI audit doc cataloging accumulated drift across 23 components ([docs/UI_AUDIT.md](docs/UI_AUDIT.md))
-- [x] Design tokens — semantic tokens for overlay/live/warning/spacing/radius/shadow/z-index scales; ~30 magic hex/rgba values swept across 9 components
-- [x] Shared `Icon` component with 18-entry path registry
+A phased redesign that shipped between v0.9.8 and v1.0.0, addressing the accumulated UI drift from 17 feature phases.
+
+- [x] UI audit doc cataloging drift across 23 components ([docs/UI_AUDIT.md](docs/UI_AUDIT.md))
+- [x] Design tokens — semantic tokens for overlay/live/warning + spacing/radius/shadow/z-index scales; ~30 magic hex/rgba values swept across 9 components; all three themes (dark, light, high-contrast) updated in parallel
+- [x] Shared `Icon` component with a 20-entry path registry
 - [x] Shared `Modal` component with focus restoration + ESC + click-outside + ARIA; backs 4 dialogs
+- [x] Shared `Spinner` + `EmptyState` primitives; Sidebar conversation list now shows loading, error, empty, and no-search-match states
 - [x] Chat toolbar overflow — 6 buttons → 3 top-level + kebab menu
-- [x] Settings sidebar reorganization — 17 flat sections → 5 thematic groups with search
-- [x] Touch / keyboard nav — hover-only message actions, annotation deletes, and file actions now respond to focus and touch
-- [ ] Sidebar + conversation list density pass
-- [ ] Empty / loading state primitives
-- [ ] Code-block action button rewrite
+- [x] Settings sidebar reorganization — 17 flat sections → 5 thematic groups with search-in-settings
+- [x] Sidebar density + visible active state (left-border accent + soft tint); fixed two broken token references in the import button
+- [x] Touch / keyboard accessibility — hover-only message actions, annotation deletes, sidebar deletes, and file actions now respond to focus and touch
+- [ ] Code-block action button rewrite (deferred — works correctly today, refactor carries regression risk for markdown rendering)
 
 ## Tech Stack
 
