@@ -46,4 +46,6 @@ export const ICONS = {
     '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   back:
     '<polyline points="15 18 9 12 15 6"/>',
+  kebab:
+    '<circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>',
 };

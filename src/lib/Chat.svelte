@@ -804,6 +804,37 @@ Be thorough in each step. Do not skip steps or combine them.`;
     }
   }
 
+  // Toolbar overflow menu
+  let showOverflowMenu = $state(false);
+  let overflowMenuEl;
+
+  function toggleOverflowMenu(e) {
+    e?.stopPropagation();
+    showOverflowMenu = !showOverflowMenu;
+  }
+
+  function closeOverflowMenu() {
+    showOverflowMenu = false;
+  }
+
+  $effect(() => {
+    if (!showOverflowMenu) return;
+    function onDocClick(e) {
+      if (overflowMenuEl && !overflowMenuEl.contains(e.target)) {
+        closeOverflowMenu();
+      }
+    }
+    function onEsc(e) {
+      if (e.key === "Escape") closeOverflowMenu();
+    }
+    document.addEventListener("click", onDocClick);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("keydown", onEsc);
+    };
+  });
+
   // Live session
   let liveActive = $state(false);
   let liveUrl = $state("");
@@ -963,20 +994,30 @@ Be thorough in each step. Do not skip steps or combine them.`;
           <button class="toolbar-btn" onclick={() => invoke("popout_conversation", { conversationId })} title="Open in new window" aria-label="Open in new window">
             <Icon name="popout" size={14} />
           </button>
-          <button class="toolbar-btn" onclick={() => exportConversation("markdown")} title="Export as Markdown" aria-label="Export as Markdown">
-            <Icon name="download" size={14} />
-            .md
-          </button>
-          <button class="toolbar-btn" onclick={() => exportConversation("json")} title="Export as JSON" aria-label="Export as JSON">
-            <Icon name="download" size={14} />
-            .json
-          </button>
-          <button class="toolbar-btn" onclick={shareConversation} title={shareTooltip} aria-label="Share conversation">
-            <Icon name="share" size={14} />
-          </button>
           <button class="toolbar-btn" class:live-active={liveActive} onclick={toggleLiveSession} title={liveActive ? "Stop live session" : "Start live session"} aria-label="Toggle live session">
             <Icon name="broadcast" size={14} />
           </button>
+          <div class="overflow-wrap" bind:this={overflowMenuEl}>
+            <button class="toolbar-btn" onclick={toggleOverflowMenu} title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded={showOverflowMenu}>
+              <Icon name="kebab" size={14} />
+            </button>
+            {#if showOverflowMenu}
+              <div class="overflow-menu" role="menu">
+                <button class="overflow-item" role="menuitem" onclick={() => { closeOverflowMenu(); exportConversation("markdown"); }}>
+                  <Icon name="download" size={14} />
+                  <span>Export as Markdown</span>
+                </button>
+                <button class="overflow-item" role="menuitem" onclick={() => { closeOverflowMenu(); exportConversation("json"); }}>
+                  <Icon name="download" size={14} />
+                  <span>Export as JSON</span>
+                </button>
+                <button class="overflow-item" role="menuitem" onclick={() => { closeOverflowMenu(); shareConversation(); }}>
+                  <Icon name="share" size={14} />
+                  <span>{shareTooltip === "Share link" ? "Copy share link" : shareTooltip}</span>
+                </button>
+              </div>
+            {/if}
+          </div>
         </div>
         {#if liveActive && liveUrl}
           <div class="live-panel">
@@ -1285,6 +1326,47 @@ Be thorough in each step. Do not skip steps or combine them.`;
 
   .toolbar-btn.live-active {
     color: var(--live-color);
+  }
+
+  /* Overflow menu */
+  .overflow-wrap {
+    position: relative;
+  }
+
+  .overflow-menu {
+    position: absolute;
+    top: calc(100% + var(--space-1));
+    right: 0;
+    min-width: 200px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-3);
+    box-shadow: var(--shadow-2);
+    padding: var(--space-1);
+    z-index: var(--z-dropdown);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .overflow-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-1);
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+  }
+
+  .overflow-item:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
   }
 
   .live-panel {
