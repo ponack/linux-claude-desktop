@@ -2321,7 +2321,7 @@ dependencies = [
 
 [[package]]
 name = "linux-claude-desktop"
-version = "0.9.9"
+version = "1.0.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
