@@ -5,6 +5,7 @@
   import "katex/dist/katex.min.css";
   import { invoke } from "@tauri-apps/api/core";
   import { tick } from "svelte";
+  import Icon from "./Icon.svelte";
 
   let { role, content, isStreaming, onEdit, onRegenerate, onFork, messageId, onPreviewArtifact, onRetry, ttsEnabled = false, ttsRate = 100 } = $props();
   let messageEl;
@@ -320,45 +321,27 @@
       <div class="message-actions">
         {#if role === "user" && onEdit}
           <button class="action-btn" onclick={startEdit} title="Edit message" aria-label="Edit message">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
+            <Icon name="edit" size={13} />
           </button>
         {/if}
         {#if role === "assistant" && onRegenerate}
           <button class="action-btn" onclick={() => onRegenerate(messageId)} title="Regenerate" aria-label="Regenerate response">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 4 23 10 17 10"/>
-              <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
-            </svg>
+            <Icon name="refresh" size={13} />
           </button>
         {/if}
         {#if onFork}
           <button class="action-btn" onclick={() => onFork(messageId)} title="Fork conversation from here" aria-label="Fork conversation">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/>
-              <path d="M6 9v6c0 1.66 1.34 3 3 3h3"/><line x1="18" y1="9" x2="18" y2="15"/>
-            </svg>
+            <Icon name="fork" size={13} />
           </button>
         {/if}
         {#if role === "assistant" && ttsEnabled}
           <button class="action-btn" onclick={() => invoke("speak_text", { text: content, rate: ttsRate })} title="Read aloud" aria-label="Read message aloud">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-            </svg>
+            <Icon name="volume" size={13} />
           </button>
         {/if}
         {#if messageId}
           <button class="action-btn" onclick={openAnnotationInput} title="Add note" aria-label="Add annotation">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="12" y1="18" x2="12" y2="12"/>
-              <line x1="9" y1="15" x2="15" y2="15"/>
-            </svg>
+            <Icon name="note" size={13} />
           </button>
         {/if}
       </div>
@@ -370,9 +353,7 @@
           <div class="annotation">
             <span class="annotation-text">{ann.content}</span>
             <button class="annotation-delete" onclick={() => removeAnnotation(ann.id)} aria-label="Delete note" title="Delete note">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
+              <Icon name="close" size={10} stroke={2.5} />
             </button>
           </div>
         {/each}
