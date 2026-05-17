@@ -8,25 +8,87 @@
 
   // Navigation
   let activeSection = $state("general");
-  const sections = [
-    { id: "general", label: "General", icon: "M12 15a3 3 0 100-6 3 3 0 000 6z M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" },
-    { id: "appearance", label: "Appearance", icon: "M12 2.69l5.66 5.66a8 8 0 11-11.31 0z" },
-    { id: "prompts", label: "Prompts", icon: "M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" },
-    { id: "projects", label: "Projects", icon: "M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" },
-    { id: "integrations", label: "Integrations", icon: "M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" },
-    { id: "schedules", label: "Schedules", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 6v6l4 2" },
-    { id: "endpoints", label: "Endpoints", icon: "M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9" },
-    { id: "routing", label: "Routing", icon: "M16 3h5v5 M4 20L21 3 M21 16v5h-5 M15 15l6 6 M4 4l5 5" },
-    { id: "knowledge", label: "Knowledge", icon: "M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" },
-    { id: "data", label: "Data & Usage", icon: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M12 3v12 M8 11l4 4 4-4" },
-    { id: "accessibility", label: "Accessibility", icon: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z M12 9a3 3 0 100 6 3 3 0 000-6z" },
-    { id: "computeruse", label: "Computer Use", icon: "M2 3h20v14H2z M8 21h8M12 17v4" },
-    { id: "git", label: "Git", icon: "M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 9v6M15.4 6.4A8 8 0 0 1 21 13v2" },
-    { id: "sync", label: "Sync", icon: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" },
-    { id: "apiserver", label: "API Server", icon: "M5 12h14M12 5l7 7-7 7" },
-    { id: "plugins", label: "Plugins", icon: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" },
-    { id: "about", label: "About", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 16v-4 M12 8h.01" },
+  let settingsSearch = $state("");
+
+  // 17 sections organized into 5 thematic groups.
+  // Adding a new section: append it to the appropriate group's `sections` array.
+  const sectionGroups = [
+    {
+      id: "general",
+      label: "General",
+      sections: [
+        { id: "general", label: "General", icon: "M12 15a3 3 0 100-6 3 3 0 000 6z M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" },
+        { id: "appearance", label: "Appearance", icon: "M12 2.69l5.66 5.66a8 8 0 11-11.31 0z" },
+        { id: "accessibility", label: "Accessibility", icon: "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z M12 9a3 3 0 100 6 3 3 0 000-6z" },
+        { id: "about", label: "About", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 16v-4 M12 8h.01" },
+      ],
+    },
+    {
+      id: "workflow",
+      label: "Workflow",
+      sections: [
+        { id: "prompts", label: "Prompts", icon: "M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" },
+        { id: "projects", label: "Projects", icon: "M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" },
+        { id: "schedules", label: "Schedules", icon: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 6v6l4 2" },
+        { id: "routing", label: "Routing", icon: "M16 3h5v5 M4 20L21 3 M21 16v5h-5 M15 15l6 6 M4 4l5 5" },
+        { id: "knowledge", label: "Knowledge", icon: "M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" },
+      ],
+    },
+    {
+      id: "models",
+      label: "Models",
+      sections: [
+        { id: "endpoints", label: "Endpoints", icon: "M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9" },
+        { id: "computeruse", label: "Computer Use", icon: "M2 3h20v14H2z M8 21h8M12 17v4" },
+      ],
+    },
+    {
+      id: "integrations",
+      label: "Integrations",
+      sections: [
+        { id: "integrations", label: "Extensions (MCP)", icon: "M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" },
+        { id: "git", label: "Git", icon: "M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 9v6M15.4 6.4A8 8 0 0 1 21 13v2" },
+        { id: "sync", label: "Sync", icon: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" },
+        { id: "apiserver", label: "API Server", icon: "M5 12h14M12 5l7 7-7 7" },
+        { id: "plugins", label: "Plugins", icon: "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" },
+      ],
+    },
+    {
+      id: "data",
+      label: "Data",
+      sections: [
+        { id: "data", label: "Data & Usage", icon: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M12 3v12 M8 11l4 4 4-4" },
+      ],
+    },
   ];
+
+  // Collapse state per group. Group containing the active section is always expanded.
+  let collapsedGroups = $state({});
+
+  function toggleGroup(groupId) {
+    collapsedGroups = { ...collapsedGroups, [groupId]: !collapsedGroups[groupId] };
+  }
+
+  // Filtered groups based on search input. Empty search → all groups, normal collapse rules.
+  // Non-empty search → only matching sections shown, all groups force-expanded.
+  const filteredGroups = $derived.by(() => {
+    const q = settingsSearch.trim().toLowerCase();
+    if (!q) return sectionGroups;
+    return sectionGroups
+      .map((g) => ({
+        ...g,
+        sections: g.sections.filter((s) =>
+          s.label.toLowerCase().includes(q) || s.id.includes(q)
+        ),
+      }))
+      .filter((g) => g.sections.length > 0);
+  });
+
+  function isGroupExpanded(group) {
+    if (settingsSearch.trim()) return true;
+    if (group.sections.some((s) => s.id === activeSection)) return true;
+    return !collapsedGroups[group.id];
+  }
 
   // Provider settings
   let provider = $state("anthropic");
@@ -857,22 +919,55 @@
         </svg>
       </button>
     </div>
-    <div role="tablist" aria-label="Settings sections">
-    {#each sections as section (section.id)}
-      <button
-        class="nav-item"
-        class:active={activeSection === section.id}
-        onclick={() => activeSection = section.id}
-        role="tab"
-        aria-selected={activeSection === section.id}
-        aria-controls="settings-panel"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d={section.icon}/>
-        </svg>
-        <span>{section.label}</span>
-      </button>
-    {/each}
+    <div class="nav-search">
+      <input
+        type="search"
+        bind:value={settingsSearch}
+        placeholder="Search settings…"
+        aria-label="Search settings"
+      />
+    </div>
+    <div role="tablist" aria-label="Settings sections" class="nav-groups">
+      {#each filteredGroups as group (group.id)}
+        {@const expanded = isGroupExpanded(group)}
+        <div class="nav-group">
+          {#if !settingsSearch.trim()}
+            <button
+              class="nav-group-header"
+              onclick={() => toggleGroup(group.id)}
+              aria-expanded={expanded}
+              aria-controls={`nav-group-${group.id}`}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="chevron" class:open={expanded}>
+                <polyline points="9 6 15 12 9 18"/>
+              </svg>
+              <span>{group.label}</span>
+            </button>
+          {/if}
+          {#if expanded}
+            <div id={`nav-group-${group.id}`} class="nav-group-items">
+              {#each group.sections as section (section.id)}
+                <button
+                  class="nav-item"
+                  class:active={activeSection === section.id}
+                  onclick={() => { activeSection = section.id; settingsSearch = ""; }}
+                  role="tab"
+                  aria-selected={activeSection === section.id}
+                  aria-controls="settings-panel"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d={section.icon}/>
+                  </svg>
+                  <span>{section.label}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/each}
+      {#if settingsSearch.trim() && filteredGroups.length === 0}
+        <div class="nav-empty">No settings match "{settingsSearch}"</div>
+      {/if}
     </div>
 
     {#if saveStatus}
@@ -2252,15 +2347,14 @@
 
   /* --- Sidebar Nav --- */
   .settings-nav {
-    width: 200px;
-    min-width: 200px;
+    width: 220px;
+    min-width: 220px;
     background: var(--bg-secondary);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    padding: 16px 0;
-    gap: 2px;
-    overflow-y: auto;
+    padding: 16px 0 0;
+    overflow: hidden;
   }
 
   .nav-header {
@@ -2288,6 +2382,73 @@
   }
   .back-btn:hover { color: var(--text-primary); background: var(--bg-tertiary); }
 
+  .nav-search {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    flex-shrink: 0;
+  }
+  .nav-search input {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-2);
+    font-size: 12px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .nav-search input:focus {
+    border-color: var(--accent);
+  }
+  .nav-search input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .nav-groups {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: var(--space-2);
+  }
+
+  .nav-group {
+    margin-bottom: var(--space-1);
+  }
+
+  .nav-group-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-1) var(--space-4) var(--space-1) var(--space-3);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: color 0.15s;
+  }
+  .nav-group-header:hover {
+    color: var(--text-secondary);
+  }
+  .nav-group-header .chevron {
+    transition: transform 0.15s;
+    opacity: 0.6;
+  }
+  .nav-group-header .chevron.open {
+    transform: rotate(90deg);
+  }
+
+  .nav-empty {
+    padding: var(--space-3) var(--space-4);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
   .nav-item {
     display: flex;
     align-items: center;
@@ -2299,11 +2460,17 @@
     transition: all 0.15s;
     text-align: left;
     border-left: 3px solid transparent;
+    width: 100%;
+    background: none;
+    border-top: none;
+    border-right: none;
+    border-bottom: none;
+    cursor: pointer;
   }
   .nav-item:hover { color: var(--text-primary); background: var(--bg-tertiary); }
   .nav-item.active {
     color: var(--accent);
-    background: rgba(78, 204, 163, 0.08);
+    background: var(--accent-soft);
     border-left-color: var(--accent);
   }
   .nav-item svg { flex-shrink: 0; opacity: 0.7; }
