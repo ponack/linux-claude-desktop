@@ -4,10 +4,14 @@
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
   import { emit as emitPluginEvent } from "./plugins.js";
+  import Spinner from "./Spinner.svelte";
+  import EmptyState from "./EmptyState.svelte";
 
   let { activeConversationId, onSelect, onNewChat, onImportConversation, openSettings, openComparison, openComputerUse, openExtensions, openTerminal, openGit, onBackToChat, currentView = "chat", refreshKey, collapsed = false } = $props();
 
   let conversations = $state([]);
+  let conversationsLoading = $state(true);
+  let conversationsError = $state("");
   let searchQuery = $state("");
 
   // Sync status
@@ -41,10 +45,14 @@
   );
 
   async function loadConversations() {
+    conversationsError = "";
     try {
       conversations = await invoke("get_conversations");
     } catch (e) {
       console.error("Failed to load conversations:", e);
+      conversationsError = String(e);
+    } finally {
+      conversationsLoading = false;
     }
   }
 
@@ -221,23 +229,47 @@
     </div>
 
     <div class="conversations-list" role="list" aria-label="Conversation history">
-      {#each filteredConversations as conv (conv.id)}
-        <div
-          class="conversation-item"
-          class:active={activeConversationId === conv.id}
-          role="button"
-          tabindex="0"
-          onclick={() => onSelect(conv.id)}
-          onkeydown={(e) => e.key === 'Enter' && onSelect(conv.id)}
-          aria-label="Open conversation: {conv.title}"
-          aria-current={activeConversationId === conv.id ? "true" : undefined}
-        >
-          <span class="conv-title">{conv.title}</span>
-          <button class="delete-btn" onclick={(e) => handleDelete(e, conv.id)} aria-label="Delete conversation: {conv.title}">
-            ×
-          </button>
+      {#if conversationsLoading}
+        <div class="conv-state">
+          <Spinner size="sm" label="Loading conversations…" />
         </div>
-      {/each}
+      {:else if conversationsError}
+        <EmptyState
+          icon="close"
+          title="Couldn't load conversations"
+          description={conversationsError}
+        />
+      {:else if conversations.length === 0}
+        <EmptyState
+          icon="chat"
+          title="No conversations yet"
+          description="Click + above to start a new chat with Claude."
+        />
+      {:else if filteredConversations.length === 0}
+        <EmptyState
+          icon="search"
+          title="No matches"
+          description={`Nothing matches "${searchQuery}".`}
+        />
+      {:else}
+        {#each filteredConversations as conv (conv.id)}
+          <div
+            class="conversation-item"
+            class:active={activeConversationId === conv.id}
+            role="button"
+            tabindex="0"
+            onclick={() => onSelect(conv.id)}
+            onkeydown={(e) => e.key === 'Enter' && onSelect(conv.id)}
+            aria-label="Open conversation: {conv.title}"
+            aria-current={activeConversationId === conv.id ? "true" : undefined}
+          >
+            <span class="conv-title">{conv.title}</span>
+            <button class="delete-btn" onclick={(e) => handleDelete(e, conv.id)} aria-label="Delete conversation: {conv.title}">
+              ×
+            </button>
+          </div>
+        {/each}
+      {/if}
     </div>
   {/if}
 
@@ -552,6 +584,13 @@
     flex: 1;
     overflow-y: auto;
     padding: 8px;
+  }
+
+  .conv-state {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-5) var(--space-3);
+    color: var(--text-muted);
   }
 
   .conversation-item {
