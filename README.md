@@ -413,6 +413,19 @@ linux-claude-desktop/
 - [x] Message annotations — hover any message to reveal a note icon; inline input saves notes below the bubble with a yellow left-border strip; persisted in SQLite, deletable per-note
 - [x] Live session — broadcast icon starts a real-time SSE feed via the local API server; open the generated URL on any LAN device to watch the conversation update live in the `/live/` PWA page
 
+### Redesign Foundations (v0.9.9, ongoing toward v1.0.0)
+
+- [x] UI audit doc cataloging accumulated drift across 23 components ([docs/UI_AUDIT.md](docs/UI_AUDIT.md))
+- [x] Design tokens — semantic tokens for overlay/live/warning/spacing/radius/shadow/z-index scales; ~30 magic hex/rgba values swept across 9 components
+- [x] Shared `Icon` component with 18-entry path registry
+- [x] Shared `Modal` component with focus restoration + ESC + click-outside + ARIA; backs 4 dialogs
+- [x] Chat toolbar overflow — 6 buttons → 3 top-level + kebab menu
+- [x] Settings sidebar reorganization — 17 flat sections → 5 thematic groups with search
+- [x] Touch / keyboard nav — hover-only message actions, annotation deletes, and file actions now respond to focus and touch
+- [ ] Sidebar + conversation list density pass
+- [ ] Empty / loading state primitives
+- [ ] Code-block action button rewrite
+
 ## Tech Stack
 
 | Layer | Technology |
