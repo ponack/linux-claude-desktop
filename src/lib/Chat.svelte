@@ -1317,16 +1317,16 @@ Be thorough in each step. Do not skip steps or combine them.`;
   }
 
   .toolbar-btn.live-active {
-    color: #e94560;
+    color: var(--live-color);
   }
 
   .live-panel {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    background: rgba(233, 69, 96, 0.07);
-    border-bottom: 1px solid rgba(233, 69, 96, 0.2);
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--live-soft);
+    border-bottom: 1px solid var(--live-color);
     font-size: 12px;
   }
 
@@ -1334,7 +1334,7 @@ Be thorough in each step. Do not skip steps or combine them.`;
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #e94560;
+    background: var(--live-color);
     animation: pulse-live 1.5s infinite;
     flex-shrink: 0;
   }
@@ -1347,7 +1347,7 @@ Be thorough in each step. Do not skip steps or combine them.`;
   .live-label {
     font-size: 11px;
     font-weight: 600;
-    color: #e94560;
+    color: var(--live-color);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     flex-shrink: 0;
@@ -1357,8 +1357,8 @@ Be thorough in each step. Do not skip steps or combine them.`;
     flex: 1;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 3px 8px;
+    border-radius: var(--radius-1);
+    padding: 3px var(--space-2);
     font-size: 11px;
     font-family: monospace;
     color: var(--text-muted);
@@ -1367,10 +1367,10 @@ Be thorough in each step. Do not skip steps or combine them.`;
   }
 
   .live-copy-btn {
-    padding: 3px 10px;
-    background: rgba(233, 69, 96, 0.15);
-    color: #e94560;
-    border-radius: 4px;
+    padding: 3px var(--space-3);
+    background: var(--accent-soft-hover);
+    color: var(--live-color);
+    border-radius: var(--radius-1);
     font-size: 11px;
     font-weight: 500;
     flex-shrink: 0;
@@ -1378,7 +1378,8 @@ Be thorough in each step. Do not skip steps or combine them.`;
   }
 
   .live-copy-btn:hover {
-    background: rgba(233, 69, 96, 0.3);
+    background: var(--accent-soft-hover);
+    filter: brightness(1.3);
   }
 
   .project-select {
@@ -1599,11 +1600,11 @@ Be thorough in each step. Do not skip steps or combine them.`;
   .variable-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--overlay-bg);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 2000;
+    z-index: var(--z-modal);
   }
 
   .variable-dialog {
@@ -1680,7 +1681,7 @@ Be thorough in each step. Do not skip steps or combine them.`;
 
   .recording {
     color: var(--danger) !important;
-    background: rgba(233, 69, 96, 0.15);
+    background: var(--accent-soft-hover);
     animation: pulse-mic 1.2s ease-in-out infinite;
   }
 
