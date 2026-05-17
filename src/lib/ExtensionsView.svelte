@@ -1,6 +1,7 @@
 <script>
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import Modal from "./Modal.svelte";
 
   let { onClose } = $props();
 
@@ -366,98 +367,82 @@
 </div>
 
 <!-- Install dialog -->
-{#if installTarget}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="dialog-backdrop" onclick={closeInstall} role="presentation">
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div class="dialog" role="dialog" aria-modal="true"
-         aria-labelledby="install-dialog-title"
-         onclick={e => e.stopPropagation()}>
-      <h3 id="install-dialog-title" class="dialog-title">Install {installTarget.name}</h3>
-      <p class="dialog-pkg">{installTarget.package}</p>
+<Modal open={!!installTarget} onClose={closeInstall} title={installTarget ? `Install ${installTarget.name}` : ""} size="md">
+  {#if installTarget}
+    <p class="dialog-pkg">{installTarget.package}</p>
 
-      {#if installTarget.env.length === 0 && !installTarget.pathsArg && !installTarget.dbPathArg}
-        <p class="dialog-note">No configuration required. This extension runs immediately via npx.</p>
-      {/if}
+    {#if installTarget.env.length === 0 && !installTarget.pathsArg && !installTarget.dbPathArg}
+      <p class="dialog-note">No configuration required. This extension runs immediately via npx.</p>
+    {/if}
 
-      {#each installTarget.env as field}
-        <div class="field-group">
-          <label class="field-label" for="install-{field.key}">{field.label}</label>
-          {#if field.type === "password"}
-            <input id="install-{field.key}" type="password" class="field-input"
-                   placeholder="Enter {field.label.toLowerCase()}…"
-                   bind:value={installValues[field.key]} />
-          {:else}
-            <input id="install-{field.key}" type="text" class="field-input"
-                   placeholder="Enter {field.label.toLowerCase()}…"
-                   bind:value={installValues[field.key]} />
-          {/if}
-          {#if field.hint}
-            <p class="field-hint">{field.hint}</p>
-          {/if}
-        </div>
-      {/each}
-
-      {#if installTarget.pathsArg}
-        <div class="field-group">
-          <label class="field-label" for="install-paths">Allowed Paths</label>
-          <input id="install-paths" type="text" class="field-input"
-                 placeholder="/home/user/projects, /tmp"
-                 bind:value={installPaths} />
-          <p class="field-hint">Comma-separated absolute paths Claude can read and write</p>
-        </div>
-      {/if}
-
-      {#if installTarget.dbPathArg}
-        <div class="field-group">
-          <label class="field-label" for="install-dbpath">Database Path</label>
-          <input id="install-dbpath" type="text" class="field-input"
-                 placeholder="/home/user/my.db"
-                 bind:value={installDbPath} />
-          <p class="field-hint">Absolute path to the SQLite database file</p>
-        </div>
-      {/if}
-
-      <div class="dialog-note warn">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" aria-hidden="true">
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
-          <line x1="12" y1="16" x2="12.01" y2="16"/>
-        </svg>
-        npx will download and run <code>{installTarget.package}</code> from the npm registry.
-        Only install extensions you trust.
+    {#each installTarget.env as field}
+      <div class="field-group">
+        <label class="field-label" for="install-{field.key}">{field.label}</label>
+        {#if field.type === "password"}
+          <input id="install-{field.key}" type="password" class="field-input"
+                 placeholder="Enter {field.label.toLowerCase()}…"
+                 bind:value={installValues[field.key]} />
+        {:else}
+          <input id="install-{field.key}" type="text" class="field-input"
+                 placeholder="Enter {field.label.toLowerCase()}…"
+                 bind:value={installValues[field.key]} />
+        {/if}
+        {#if field.hint}
+          <p class="field-hint">{field.hint}</p>
+        {/if}
       </div>
+    {/each}
 
-      <div class="dialog-actions">
-        <button class="btn-cancel" onclick={closeInstall}>Cancel</button>
-        <button class="btn-confirm" onclick={confirmInstall}
-                disabled={!installReady(installTarget) || installing}>
-          {installing ? "Installing…" : "Install"}
-        </button>
+    {#if installTarget.pathsArg}
+      <div class="field-group">
+        <label class="field-label" for="install-paths">Allowed Paths</label>
+        <input id="install-paths" type="text" class="field-input"
+               placeholder="/home/user/projects, /tmp"
+               bind:value={installPaths} />
+        <p class="field-hint">Comma-separated absolute paths Claude can read and write</p>
       </div>
+    {/if}
+
+    {#if installTarget.dbPathArg}
+      <div class="field-group">
+        <label class="field-label" for="install-dbpath">Database Path</label>
+        <input id="install-dbpath" type="text" class="field-input"
+               placeholder="/home/user/my.db"
+               bind:value={installDbPath} />
+        <p class="field-hint">Absolute path to the SQLite database file</p>
+      </div>
+    {/if}
+
+    <div class="dialog-note warn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      npx will download and run <code>{installTarget.package}</code> from the npm registry.
+      Only install extensions you trust.
     </div>
-  </div>
-{/if}
+
+    <div class="dialog-actions">
+      <button class="btn-cancel" onclick={closeInstall}>Cancel</button>
+      <button class="btn-confirm" onclick={confirmInstall}
+              disabled={!installReady(installTarget) || installing}>
+        {installing ? "Installing…" : "Install"}
+      </button>
+    </div>
+  {/if}
+</Modal>
 
 <!-- Remove confirmation dialog -->
-{#if removeTarget}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="dialog-backdrop" onclick={() => removeTarget = null} role="presentation">
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div class="dialog" role="dialog" aria-modal="true"
-         aria-labelledby="remove-dialog-title"
-         onclick={e => e.stopPropagation()}>
-      <h3 id="remove-dialog-title" class="dialog-title">Remove {removeTarget.name}?</h3>
-      <p class="dialog-pkg">This will remove the MCP server configuration. You can reinstall it at any time.</p>
-      <div class="dialog-actions">
-        <button class="btn-cancel" onclick={() => removeTarget = null}>Cancel</button>
-        <button class="btn-remove-confirm" onclick={() => removeExtension(removeTarget)}>Remove</button>
-      </div>
+<Modal open={!!removeTarget} onClose={() => removeTarget = null} title={removeTarget ? `Remove ${removeTarget.name}?` : ""} size="sm">
+  {#if removeTarget}
+    <p class="dialog-pkg">This will remove the MCP server configuration. You can reinstall it at any time.</p>
+    <div class="dialog-actions">
+      <button class="btn-cancel" onclick={() => removeTarget = null}>Cancel</button>
+      <button class="btn-remove-confirm" onclick={() => removeExtension(removeTarget)}>Remove</button>
     </div>
-  </div>
-{/if}
+  {/if}
+</Modal>
 
 <!-- Toast -->
 {#if toast}
@@ -710,36 +695,7 @@
   }
   .btn-remove:hover { background: var(--accent-soft); color: var(--danger); border-color: var(--danger); }
 
-  /* Dialogs */
-  .dialog-backdrop {
-    position: fixed;
-    inset: 0;
-    background: var(--overlay-bg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: var(--z-dialog);
-    padding: 20px;
-  }
-
-  .dialog {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 24px;
-    width: 100%;
-    max-width: 440px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .dialog-title {
-    font-size: 16px;
-    font-weight: 700;
-    margin: 0;
-  }
-
+  /* Dialog content styling (chrome handled by Modal component) */
   .dialog-pkg {
     font-size: 12px;
     color: var(--text-muted);
