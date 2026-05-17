@@ -531,13 +531,13 @@
 
   .new-chat-btn {
     flex: 1;
-    padding: 10px;
+    padding: var(--space-2) var(--space-3);
     background: var(--accent);
-    color: white;
-    border-radius: 8px;
-    font-size: 14px;
+    color: var(--white);
+    border-radius: var(--radius-2);
+    font-size: 13px;
     font-weight: 500;
-    transition: background 0.2s;
+    transition: background 0.15s;
   }
 
   .new-chat-btn:hover {
@@ -545,31 +545,31 @@
   }
 
   .import-btn {
-    padding: 10px 12px;
+    padding: var(--space-2) var(--space-3);
     background: var(--bg-secondary);
     color: var(--text-secondary);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-2);
     font-size: 16px;
-    transition: background 0.2s, color 0.2s;
+    transition: background 0.15s, color 0.15s;
     flex-shrink: 0;
   }
 
   .import-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
   }
 
   .search-box {
-    padding: 8px 12px 0;
+    padding: var(--space-2) var(--space-3) 0;
   }
 
   .search-box input {
     width: 100%;
-    padding: 7px 10px;
+    padding: var(--space-1) var(--space-2);
     background: var(--bg-input);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-2);
     font-size: 13px;
     outline: none;
     transition: border-color 0.15s;
@@ -595,22 +595,28 @@
 
   .conversation-item {
     width: 100%;
-    padding: 10px 12px;
-    border-radius: 8px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-2);
     text-align: left;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    transition: background 0.15s;
-    margin-bottom: 2px;
+    gap: var(--space-1);
+    transition: background 0.12s;
+    margin-bottom: 1px;
+    border-left: 2px solid transparent;
+    color: var(--text-secondary);
   }
 
   .conversation-item:hover {
     background: var(--bg-tertiary);
+    color: var(--text-primary);
   }
 
   .conversation-item.active {
-    background: var(--bg-tertiary);
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    color: var(--text-primary);
   }
 
   .conv-title {
@@ -619,18 +625,26 @@
     white-space: nowrap;
     flex: 1;
     font-size: 13px;
+    line-height: 1.4;
   }
 
   .delete-btn {
     opacity: 0;
     font-size: 18px;
     color: var(--text-muted);
-    padding: 0 4px;
-    transition: opacity 0.15s;
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-1);
+    transition: opacity 0.15s, color 0.15s;
+    flex-shrink: 0;
   }
 
-  .conversation-item:hover .delete-btn {
+  .conversation-item:hover .delete-btn,
+  .conversation-item:focus-within .delete-btn {
     opacity: 1;
+  }
+
+  @media (hover: none) {
+    .delete-btn { opacity: 1; }
   }
 
   .delete-btn:hover {
