@@ -644,7 +644,7 @@
   }
 
   .sync-conflict-badge {
-    background: var(--warning, #e8a838);
+    background: var(--warning);
     color: #000;
     border-radius: 9px;
     font-size: 10px;
@@ -849,10 +849,10 @@
   }
 
   .update-error {
-    padding: 12px;
-    background: rgba(233, 69, 96, 0.1);
+    padding: var(--space-3);
+    background: var(--accent-soft);
     color: var(--danger);
-    border-radius: 8px;
+    border-radius: var(--radius-3);
     font-size: 13px;
   }
 

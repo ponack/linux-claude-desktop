@@ -181,8 +181,8 @@
     line-height: 1.5;
     padding: 0;
   }
-  .diff-content :global(.diff-added) { background: rgba(78, 204, 163, 0.15); color: #4ecca3; }
-  .diff-content :global(.diff-removed) { background: rgba(233, 69, 96, 0.15); color: #e94560; }
+  .diff-content :global(.diff-added) { background: rgba(78, 204, 163, 0.15); color: var(--success); }
+  .diff-content :global(.diff-removed) { background: var(--accent-soft-hover); color: var(--danger); }
   .diff-content :global(.diff-unchanged) { color: var(--text-muted); }
   .diff-content :global(.diff-prefix) { display: inline-block; width: 20px; text-align: center; opacity: 0.6; user-select: none; }
   .version-code {

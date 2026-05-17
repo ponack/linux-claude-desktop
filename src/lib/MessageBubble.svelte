@@ -415,7 +415,7 @@
 
   .message.error {
     align-self: center;
-    background: rgba(233, 69, 96, 0.1);
+    background: var(--accent-soft);
     border: 1px solid var(--danger);
     max-width: 90%;
   }
@@ -479,8 +479,16 @@
     transition: opacity 0.15s;
   }
 
-  .message:hover .message-actions {
+  .message:hover .message-actions,
+  .message:focus-within .message-actions {
     opacity: 1;
+  }
+
+  /* Touch / pointer-coarse devices: always show actions */
+  @media (hover: none) {
+    .message-actions {
+      opacity: 1;
+    }
   }
 
   .action-btn {
@@ -594,20 +602,20 @@
     position: absolute;
     top: 6px;
     right: 60px;
-    padding: 3px 10px;
+    padding: 3px var(--space-3);
     font-size: 11px;
     font-family: inherit;
-    background: rgba(233, 69, 96, 0.2);
+    background: var(--accent-soft-hover);
     color: var(--accent);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-1);
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
   }
 
   .message-content :global(.preview-btn:hover) {
-    background: rgba(233, 69, 96, 0.4);
-    color: white;
+    background: var(--accent);
+    color: var(--white);
   }
 
   .message-content :global(p) {
@@ -731,11 +739,11 @@
   .annotation {
     display: flex;
     align-items: center;
-    gap: 6px;
-    background: rgba(255, 203, 107, 0.08);
-    border-left: 2px solid var(--warning, #e8a838);
-    border-radius: 0 4px 4px 0;
-    padding: 4px 8px;
+    gap: var(--space-2);
+    background: var(--warning-soft);
+    border-left: 2px solid var(--warning);
+    border-radius: 0 var(--radius-1) var(--radius-1) 0;
+    padding: var(--space-1) var(--space-2);
     font-size: 12px;
     color: var(--text-muted);
   }
@@ -755,7 +763,8 @@
     transition: opacity 0.15s, color 0.15s;
   }
 
-  .annotation:hover .annotation-delete {
+  .annotation:hover .annotation-delete,
+  .annotation:focus-within .annotation-delete {
     opacity: 1;
   }
 
@@ -769,10 +778,10 @@
 
   .annotation-input {
     width: 100%;
-    background: rgba(255, 203, 107, 0.06);
-    border: 1px solid var(--warning, #e8a838);
-    border-radius: 4px;
-    padding: 4px 8px;
+    background: var(--warning-soft);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-1);
+    padding: var(--space-1) var(--space-2);
     font-size: 12px;
     color: var(--text-primary);
     font-family: inherit;

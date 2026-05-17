@@ -1693,7 +1693,7 @@
         <p class="section-hint">Let Claude control your Linux desktop — click, type, and take screenshots to complete tasks autonomously. Open the Computer Use view from the sidebar or with <kbd>Ctrl+Shift+U</kbd>.</p>
 
         {#if cuAvailability && !cuAvailability.available}
-          <div class="card" style="border-color: var(--danger); background: rgba(233,69,96,0.06);">
+          <div class="card" style="border-color: var(--danger); background: var(--accent-soft);">
             <p style="font-size:13px; color: var(--danger); margin:0 0 8px;">Setup required to use Computer Use:</p>
             {#if !cuAvailability.xdotool}
               <p class="hint"><code>sudo apt install xdotool</code> — mouse &amp; keyboard control</p>
@@ -1959,7 +1959,7 @@
           <!-- Conflict resolution -->
           {#if syncConflicts.length > 0}
             <div class="card">
-              <h4 style="margin: 0 0 12px; font-size: 14px; color: var(--warning, #e8a838);">
+              <h4 style="margin: 0 0 12px; font-size: 14px; color: var(--warning);">
                 ⚠ {syncConflicts.length} Sync Conflict{syncConflicts.length > 1 ? "s" : ""}
               </h4>
               <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 12px;">
@@ -2123,7 +2123,7 @@
               </button>
             </div>
             {#if pluginInstallError}
-              <div style="font-size: 12px; padding: 8px; background: rgba(233, 69, 96, 0.1); color: var(--danger); border-radius: 6px; white-space: pre-wrap; word-break: break-word;">
+              <div style="font-size: 12px; padding: 8px; background: var(--accent-soft); color: var(--danger); border-radius: 6px; white-space: pre-wrap; word-break: break-word;">
                 {pluginInstallError}
               </div>
             {:else if pluginInstallMsg}
@@ -2161,7 +2161,7 @@
                     <strong style="font-size: 14px;">{p.manifest.name}</strong>
                     <span style="font-size: 11px; color: var(--text-muted); font-family: monospace;">v{p.manifest.version}</span>
                     {#if rt?.error}
-                      <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(233, 69, 96, 0.15); color: var(--danger);">Error</span>
+                      <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--accent-soft-hover); color: var(--danger);">Error</span>
                     {:else if p.enabled}
                       <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(78, 204, 163, 0.15); color: var(--success);">Active</span>
                     {:else}
@@ -2471,7 +2471,7 @@
   .btn-sm.accent:hover { background: var(--accent-hover); }
   .btn-sm.accent:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-sm.danger { color: var(--danger); border-color: var(--danger); }
-  .btn-sm.danger:hover { background: rgba(233, 69, 96, 0.1); }
+  .btn-sm.danger:hover { background: var(--accent-soft); }
 
   .btn-action {
     padding: 8px 16px;
@@ -2489,7 +2489,7 @@
     color: var(--danger);
     border: 1px solid var(--danger);
   }
-  .btn-action.outline-danger:hover:not(:disabled) { background: rgba(233, 69, 96, 0.1); }
+  .btn-action.outline-danger:hover:not(:disabled) { background: var(--accent-soft); }
 
   /* --- Items --- */
   .item-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -2590,7 +2590,7 @@
     font-weight: 500;
   }
   .status-msg.success { background: rgba(78, 204, 163, 0.15); color: var(--success, #4ecca3); }
-  .status-msg.error { background: rgba(233, 69, 96, 0.1); color: var(--danger); }
+  .status-msg.error { background: var(--accent-soft); color: var(--danger); }
   .global-error { margin-top: 16px; }
 
   /* --- Sync conflicts --- */
@@ -2741,8 +2741,8 @@
     border-color: var(--accent-color, #6366f1);
     color: white;
   }
-  .btn-sm.btn-danger { border-color: #ef4444; color: #ef4444; }
-  .btn-sm.btn-danger:hover { background: #ef444420; }
+  .btn-sm.btn-danger { border-color: var(--danger); color: var(--danger); }
+  .btn-sm.btn-danger:hover { background: var(--accent-soft); }
   .form-grid {
     display: flex;
     flex-direction: column;

@@ -567,7 +567,7 @@
     font-size: 0.85em;
   }
 
-  .panel-error { color: #ef4444; }
+  .panel-error { color: var(--danger); }
 
   .streaming-indicator {
     color: var(--text-secondary);
@@ -605,7 +605,7 @@
     color: var(--text-secondary);
     padding: 0 2px;
   }
-  .star-btn.active { color: #f59e0b; }
+  .star-btn.active { color: var(--warning); }
   .star-btn:disabled { cursor: default; }
 
   .empty-state {

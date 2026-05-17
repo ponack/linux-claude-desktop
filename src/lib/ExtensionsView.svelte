@@ -514,11 +514,11 @@
 
   /* Warning */
   .ext-warning {
-    margin: 12px 20px 0;
+    margin: var(--space-3) 20px 0;
     padding: 10px 14px;
-    border-radius: 8px;
-    background: rgba(233, 69, 96, 0.1);
-    border: 1px solid rgba(233, 69, 96, 0.3);
+    border-radius: var(--radius-3);
+    background: var(--accent-soft);
+    border: 1px solid var(--danger);
     font-size: 13px;
     flex-shrink: 0;
   }
@@ -708,17 +708,17 @@
     color: var(--text-muted);
     cursor: pointer;
   }
-  .btn-remove:hover { background: rgba(233, 69, 96, 0.1); color: var(--danger); border-color: rgba(233, 69, 96, 0.4); }
+  .btn-remove:hover { background: var(--accent-soft); color: var(--danger); border-color: var(--danger); }
 
   /* Dialogs */
   .dialog-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.5);
+    background: var(--overlay-bg);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 100;
+    z-index: var(--z-dialog);
     padding: 20px;
   }
 
@@ -837,10 +837,10 @@
     border-radius: 20px;
     z-index: 200;
     white-space: nowrap;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    box-shadow: var(--shadow-2);
     animation: fade-in 0.2s ease;
   }
-  .toast-error { background: rgba(233,69,96,0.2); border-color: rgba(233,69,96,0.4); color: var(--danger); }
+  .toast-error { background: var(--accent-soft-hover); border-color: var(--danger); color: var(--danger); }
 
   @keyframes fade-in {
     from { opacity: 0; transform: translateX(-50%) translateY(8px); }

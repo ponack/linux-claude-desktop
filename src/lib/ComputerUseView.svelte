@@ -259,7 +259,7 @@
     font-weight: 700;
     padding: 2px 8px;
     border-radius: 10px;
-    background: rgba(233, 69, 96, 0.2);
+    background: var(--accent-soft-hover);
     color: var(--danger);
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -283,11 +283,11 @@
 
   /* Warning */
   .cu-warning {
-    margin: 12px 20px 0;
+    margin: var(--space-3) 20px 0;
     padding: 10px 14px;
-    border-radius: 8px;
-    background: rgba(233, 69, 96, 0.1);
-    border: 1px solid rgba(233, 69, 96, 0.3);
+    border-radius: var(--radius-3);
+    background: var(--accent-soft);
+    border: 1px solid var(--danger);
     font-size: 13px;
     color: var(--text-primary);
     flex-shrink: 0;
@@ -411,12 +411,12 @@
   .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .stop-btn {
-    background: rgba(233, 69, 96, 0.2);
+    background: var(--accent-soft-hover);
     color: var(--danger);
-    border: 1px solid rgba(233, 69, 96, 0.4);
+    border: 1px solid var(--danger);
   }
 
-  .stop-btn:hover { background: rgba(233, 69, 96, 0.3); }
+  .stop-btn:hover { background: var(--accent-soft-hover); filter: brightness(1.2); }
 
   .clear-btn {
     padding: 7px 12px;

@@ -717,7 +717,11 @@
   .file-row:hover { background: var(--bg-tertiary); }
   .file-row.active { background: var(--bg-tertiary); }
 
-  .file-row:hover .file-action-btn { opacity: 1; }
+  .file-row:hover .file-action-btn,
+  .file-row:focus-within .file-action-btn { opacity: 1; }
+  @media (hover: none) {
+    .file-action-btn { opacity: 1; }
+  }
 
   .status-badge {
     font-size: 10px;

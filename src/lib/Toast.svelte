@@ -40,10 +40,10 @@
     animation: toast-in 0.18s ease-out;
   }
 
-  .toast-info    { border-left: 3px solid var(--accent, #7aa2f7); }
-  .toast-success { border-left: 3px solid var(--success, #4ecca3); }
-  .toast-warning { border-left: 3px solid var(--warning, #e0af68); }
-  .toast-error   { border-left: 3px solid var(--danger,  #e94560); }
+  .toast-info    { border-left: 3px solid var(--accent); }
+  .toast-success { border-left: 3px solid var(--success); }
+  .toast-warning { border-left: 3px solid var(--warning); }
+  .toast-error   { border-left: 3px solid var(--danger); }
 
   .toast-msg {
     flex: 1;
