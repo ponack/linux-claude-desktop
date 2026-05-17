@@ -37,7 +37,7 @@ jobs:
         working-directory: apps/companion-pwa
         run: npm run build
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: apps/companion-pwa/dist
 
