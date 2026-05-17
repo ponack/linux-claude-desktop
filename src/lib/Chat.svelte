@@ -8,6 +8,7 @@
   import MessageBubble from "./MessageBubble.svelte";
   import ArtifactPanel from "./ArtifactPanel.svelte";
   import Icon from "./Icon.svelte";
+  import Modal from "./Modal.svelte";
   import { getPluginCommands, onPluginCommandsChanged, runPluginCommand, emit as emitPluginEvent } from "./plugins.js";
   import { showToast } from "./toast.js";
 
@@ -1151,52 +1152,44 @@ Be thorough in each step. Do not skip steps or combine them.`;
   {/if}
 </div>
 
-{#if showUrlImport}
-  <div class="variable-overlay" onclick={() => (showUrlImport = false)} role="dialog" aria-modal="true" aria-labelledby="url-import-title">
-    <div class="variable-dialog" onclick={(e) => e.stopPropagation()}>
-      <h3 id="url-import-title">Import Web Page</h3>
-      <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 12px;">Fetch a URL, extract text content, and save to knowledge base.</p>
-      <input
-        type="url"
-        bind:value={importUrl}
-        placeholder="https://example.com/article"
-        onkeydown={(e) => e.key === "Enter" && handleUrlImport()}
-        style="width: 100%; box-sizing: border-box; padding: 8px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text-primary); outline: none;"
-      />
-      <div class="variable-actions" style="margin-top: 12px;">
-        <button class="var-btn primary" onclick={handleUrlImport} disabled={!importUrl.trim() || importingUrl}>
-          {importingUrl ? "Importing..." : "Import"}
-        </button>
-        <button class="var-btn" onclick={() => (showUrlImport = false)}>Cancel</button>
-      </div>
-    </div>
+<Modal open={showUrlImport} onClose={() => (showUrlImport = false)} title="Import Web Page" size="sm">
+  <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 12px;">Fetch a URL, extract text content, and save to knowledge base.</p>
+  <input
+    type="url"
+    bind:value={importUrl}
+    placeholder="https://example.com/article"
+    onkeydown={(e) => e.key === "Enter" && handleUrlImport()}
+    style="width: 100%; box-sizing: border-box; padding: 8px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--text-primary); outline: none;"
+  />
+  <div class="variable-actions" style="margin-top: 12px;">
+    <button class="var-btn primary" onclick={handleUrlImport} disabled={!importUrl.trim() || importingUrl}>
+      {importingUrl ? "Importing..." : "Import"}
+    </button>
+    <button class="var-btn" onclick={() => (showUrlImport = false)}>Cancel</button>
   </div>
-{/if}
+</Modal>
 
-{#if promptVariableDialog}
-  <div class="variable-overlay" onclick={cancelPromptVariables} role="dialog" aria-modal="true" aria-labelledby="var-dialog-title">
-    <div class="variable-dialog" onclick={(e) => e.stopPropagation()}>
-      <h3 id="var-dialog-title">Fill in Variables</h3>
-      <div class="variable-list">
-        {#each promptVariableDialog.variables as variable, i}
-          <label class="variable-field">
-            <span class="variable-name">{variable.name}</span>
-            <input
-              type="text"
-              bind:value={promptVariableDialog.variables[i].value}
-              placeholder="Enter value for {variable.name}"
-              onkeydown={(e) => e.key === "Enter" && applyPromptVariables()}
-            />
-          </label>
-        {/each}
-      </div>
-      <div class="variable-actions">
-        <button class="var-btn primary" onclick={applyPromptVariables}>Apply</button>
-        <button class="var-btn" onclick={cancelPromptVariables}>Cancel</button>
-      </div>
+<Modal open={!!promptVariableDialog} onClose={cancelPromptVariables} title="Fill in Variables" size="sm">
+  {#if promptVariableDialog}
+    <div class="variable-list">
+      {#each promptVariableDialog.variables as variable, i}
+        <label class="variable-field">
+          <span class="variable-name">{variable.name}</span>
+          <input
+            type="text"
+            bind:value={promptVariableDialog.variables[i].value}
+            placeholder="Enter value for {variable.name}"
+            onkeydown={(e) => e.key === "Enter" && applyPromptVariables()}
+          />
+        </label>
+      {/each}
     </div>
-  </div>
-{/if}
+    <div class="variable-actions">
+      <button class="var-btn primary" onclick={applyPromptVariables}>Apply</button>
+      <button class="var-btn" onclick={cancelPromptVariables}>Cancel</button>
+    </div>
+  {/if}
+</Modal>
 
 <style>
   .chat-container {
@@ -1569,32 +1562,6 @@ Be thorough in each step. Do not skip steps or combine them.`;
     color: var(--accent, #7aa2f7);
     font-family: "JetBrains Mono", monospace;
     margin-left: 6px;
-  }
-
-  .variable-overlay {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: var(--overlay-bg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: var(--z-modal);
-  }
-
-  .variable-dialog {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    width: 400px;
-    max-width: 90vw;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  }
-
-  .variable-dialog h3 {
-    font-size: 15px;
-    font-weight: 600;
-    margin-bottom: 16px;
   }
 
   .variable-list {
